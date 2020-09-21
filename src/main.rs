@@ -2,22 +2,26 @@
 #![no_main]
 #![feature(llvm_asm)]
 #![feature(abi_avr_interrupt)]
+
 // Pull in the panic handler from panic-halt
 extern crate panic_halt;
+mod motor;
 mod timers;
 mod zumo_sensors;
 
-use crate::zumo_sensors::ZumoSensors;
+use crate::{
+    motor::{
+        LeftMotorController,
+        RightMotorController,
+    },
+    zumo_sensors::ZumoSensors,
+};
 use arduino_uno::{
     atmega328p::TC0 as Timer0,
     hal::{
         clock::MHz16,
-        port::{
-            mode::*,
-            portb::*,
-            portc::*,
-            portd::*,
-        },
+        port::mode::*,
+        pwm,
         usart::Usart0,
     },
     prelude::*,
@@ -30,6 +34,8 @@ struct Uno {
     timer0: Timer0,
 
     ddr: arduino_uno::DDR,
+    left_motor: LeftMotorController,
+    right_motor: RightMotorController,
     zumo_sensors: ZumoSensors,
 }
 
@@ -42,12 +48,17 @@ impl Uno {
             avr_device::interrupt::enable();
         }
 
+        let mut pwm_timer = pwm::Timer1Pwm::new(board.TC1, pwm::Prescaler::Prescale64);
+        let left_motor = LeftMotorController::new(pins.d8, pins.d10, &pins.ddr, &mut pwm_timer);
+        let right_motor = RightMotorController::new(pins.d7, pins.d9, &pins.ddr, &mut pwm_timer);
         Uno::init_timers(&board.TC0);
         Uno {
             serial,
             timer0: board.TC0,
 
             ddr: pins.ddr,
+            left_motor,
+            right_motor,
             zumo_sensors: ZumoSensors {
                 s0: Some(pins.d5),
                 s1: Some(pins.a2),
@@ -64,6 +75,16 @@ impl Uno {
 fn main() -> ! {
     let mut uno = Uno::init();
 
+    uno.left_motor.set(1.0);
+    uno.right_motor.set(1.0);
+    arduino_uno::delay_ms(1000);
+
+    uno.left_motor.set(-1.0);
+    uno.right_motor.set(-1.0);
+    arduino_uno::delay_ms(1000);
+
+    uno.left_motor.set(0.0);
+    uno.right_motor.set(0.0);
     loop {
         let sensor_values = uno.read_sensors();
         uwriteln!(
@@ -78,14 +99,6 @@ fn main() -> ! {
         )
         .void_unwrap();
         arduino_uno::delay_ms(1000);
-        // ir_sensor1.into_output.void_unwrap();
-        // ir_sensor1.set_high();
-        // arduino_uno::delay_ms(10);
-        // ir_sensor1.into_input.void_unwrap();
-
-        // if ir_sensor1.is_high().void_unwrap() {
-        //     ufmt::uwriteln!(&mut serial, "The sensor. Is on.\r").void_unwrap();
-        // }
     }
 }
 
