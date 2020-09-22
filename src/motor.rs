@@ -1,15 +1,10 @@
-use arduino_uno::{
-    hal::{
-        port::{
-            mode::*,
-            portb::*,
-            portd::*,
-        },
-        pwm::Timer1Pwm,
-    },
-    prelude::*,
-    Pins,
-    DDR,
+use embedded_hal::{
+    digital::v2::OutputPin,
+    PwmPin,
+};
+use void::{
+    ResultVoidExt,
+    Void,
 };
 
 enum MotorDirection {
@@ -17,27 +12,20 @@ enum MotorDirection {
     Reverse,
 }
 
-pub struct LeftMotorController {
-    direction_pin: PB0<Output>,
-    throttle_pin: PB2<Pwm<Timer1Pwm>>,
+pub struct MotorController<PD: OutputPin, PT: PwmPin> {
+    direction_pin: PD,
+    throttle_pin: PT,
 }
 
-pub struct RightMotorController {
-    direction_pin: PD7<Output>,
-    throttle_pin: PB1<Pwm<Timer1Pwm>>,
-}
-
-impl LeftMotorController {
-    pub fn new(
-        direction_pin: PB0<Input<Floating>>,
-        throttle_pin: PB2<Input<Floating>>,
-        ddr: &DDR,
-        pwm_timer: &mut Timer1Pwm,
-    ) -> LeftMotorController {
-        let mut throttle_pin = throttle_pin.into_output(ddr).into_pwm(pwm_timer);
+impl<PD: OutputPin, PT: PwmPin> MotorController<PD, PT>
+where
+    PD: OutputPin<Error = Void>,
+    PT: PwmPin<Duty = u8>,
+{
+    pub fn new(direction_pin: PD, mut throttle_pin: PT) -> MotorController<PD, PT> {
         throttle_pin.enable();
-        LeftMotorController {
-            direction_pin: direction_pin.into_output(ddr),
+        MotorController {
+            direction_pin,
             throttle_pin,
         }
     }
@@ -45,33 +33,8 @@ impl LeftMotorController {
     pub fn set(&mut self, value: f32) {
         let (dir, throttle) = compute_direction_and_throttle(value);
         match dir {
-            MotorDirection::Forward => self.direction_pin.set_high().void_unwrap(),
-            MotorDirection::Reverse => self.direction_pin.set_low().void_unwrap(),
-        }
-        self.throttle_pin.set_duty(throttle);
-    }
-}
-
-impl RightMotorController {
-    pub fn new(
-        direction_pin: PD7<Input<Floating>>,
-        throttle_pin: PB1<Input<Floating>>,
-        ddr: &DDR,
-        pwm_timer: &mut Timer1Pwm,
-    ) -> RightMotorController {
-        let mut throttle_pin = throttle_pin.into_output(ddr).into_pwm(pwm_timer);
-        throttle_pin.enable();
-        RightMotorController {
-            direction_pin: direction_pin.into_output(ddr),
-            throttle_pin,
-        }
-    }
-
-    pub fn set(&mut self, value: f32) {
-        let (dir, throttle) = compute_direction_and_throttle(value);
-        match dir {
-            MotorDirection::Forward => self.direction_pin.set_high().void_unwrap(),
-            MotorDirection::Reverse => self.direction_pin.set_low().void_unwrap(),
+            MotorDirection::Forward => self.direction_pin.set_low().void_unwrap(),
+            MotorDirection::Reverse => self.direction_pin.set_high().void_unwrap(),
         }
         self.throttle_pin.set_duty(throttle);
     }

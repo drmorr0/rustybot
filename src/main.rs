@@ -10,17 +10,18 @@ mod timers;
 mod zumo_sensors;
 
 use crate::{
-    motor::{
-        LeftMotorController,
-        RightMotorController,
-    },
+    motor::MotorController,
     zumo_sensors::ZumoSensors,
 };
 use arduino_uno::{
     atmega328p::TC0 as Timer0,
     hal::{
         clock::MHz16,
-        port::mode::*,
+        port::{
+            mode::*,
+            portb::*,
+            portd::*,
+        },
         pwm,
         usart::Usart0,
     },
@@ -34,8 +35,8 @@ struct Uno {
     timer0: Timer0,
 
     ddr: arduino_uno::DDR,
-    left_motor: LeftMotorController,
-    right_motor: RightMotorController,
+    left_motor: MotorController<PB0<Output>, PB2<Pwm<pwm::Timer1Pwm>>>,
+    right_motor: MotorController<PD7<Output>, PB1<Pwm<pwm::Timer1Pwm>>>,
     zumo_sensors: ZumoSensors,
 }
 
@@ -49,8 +50,14 @@ impl Uno {
         }
 
         let mut pwm_timer = pwm::Timer1Pwm::new(board.TC1, pwm::Prescaler::Prescale64);
-        let left_motor = LeftMotorController::new(pins.d8, pins.d10, &pins.ddr, &mut pwm_timer);
-        let right_motor = RightMotorController::new(pins.d7, pins.d9, &pins.ddr, &mut pwm_timer);
+        let left_motor = MotorController::new(
+            pins.d8.into_output(&pins.ddr),
+            pins.d10.into_output(&pins.ddr).into_pwm(&mut pwm_timer),
+        );
+        let right_motor = MotorController::new(
+            pins.d7.into_output(&pins.ddr),
+            pins.d9.into_output(&pins.ddr).into_pwm(&mut pwm_timer),
+        );
         Uno::init_timers(&board.TC0);
         Uno {
             serial,
@@ -76,11 +83,11 @@ fn main() -> ! {
     let mut uno = Uno::init();
 
     uno.left_motor.set(1.0);
-    uno.right_motor.set(1.0);
+    uno.right_motor.set(-1.0);
     arduino_uno::delay_ms(1000);
 
     uno.left_motor.set(-1.0);
-    uno.right_motor.set(-1.0);
+    uno.right_motor.set(1.0);
     arduino_uno::delay_ms(1000);
 
     uno.left_motor.set(0.0);
@@ -101,34 +108,3 @@ fn main() -> ! {
         arduino_uno::delay_ms(1000);
     }
 }
-
-/*#[arduino_uno::entry]
-fn main() -> ! {
-    let mut dp = arduino_uno::Peripherals::take().unwrap();
-    let mut pins = arduino_uno::Pins::new(dp.PORTB, dp.PORTC, dp.PORTD);
-
-    let mut right_motor_direction = pins.d7.into_output(&mut pins.ddr);
-    let mut left_motor_direction = pins.d8.into_output(&mut pins.ddr);
-
-    let mut timer1 = pwm::Timer1Pwm::new(dp.TC1, pwm::Prescaler::Prescale64);
-    let mut right_motor_speed = pins.d9.into_output(&mut pins.ddr).into_pwm(&mut timer1);
-    let mut left_motor_speed = pins.d10.into_output(&mut pins.ddr).into_pwm(&mut timer1);
-
-    right_motor_direction.set_low().void_unwrap();
-    left_motor_direction.set_low().void_unwrap();
-    right_motor_speed.enable();
-    left_motor_speed.enable();
-
-    loop {
-        for i in 0..10 {
-            right_motor_speed.set_duty(i * 20);
-            left_motor_speed.set_duty(i * 20);
-            arduino_uno::delay_ms(250);
-        }
-        for i in (0..10).rev() {
-            right_motor_speed.set_duty(i * 20);
-            left_motor_speed.set_duty(i * 20);
-            arduino_uno::delay_ms(250);
-        }
-    }
-}*/
