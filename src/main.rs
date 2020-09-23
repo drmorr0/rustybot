@@ -10,7 +10,10 @@ mod timers;
 mod zumo_sensors;
 
 use crate::{
-    motor::MotorController,
+    motor::{
+        MotorController,
+        UPDATE_DELAY_US,
+    },
     zumo_sensors::ZumoSensors,
 };
 use arduino_uno::{
@@ -78,33 +81,59 @@ impl Uno {
     }
 }
 
+enum State {
+    Forward,
+    Backward,
+    Stopped,
+}
+
 #[arduino_uno::entry]
 fn main() -> ! {
     let mut uno = Uno::init();
 
+    let mut state_change_time = unsafe { uno.micros() };
+    let mut last_update_time = state_change_time;
+    let mut state = State::Forward;
     uno.left_motor.set(1.0);
-    uno.right_motor.set(-1.0);
-    arduino_uno::delay_ms(1000);
-
-    uno.left_motor.set(-1.0);
     uno.right_motor.set(1.0);
-    arduino_uno::delay_ms(1000);
-
-    uno.left_motor.set(0.0);
-    uno.right_motor.set(0.0);
     loop {
-        let sensor_values = uno.read_sensors();
-        uwriteln!(
-            &mut uno.serial,
-            "{} {} {} {} {} {}",
-            sensor_values[0],
-            sensor_values[1],
-            sensor_values[2],
-            sensor_values[3],
-            sensor_values[4],
-            sensor_values[5]
-        )
-        .void_unwrap();
-        arduino_uno::delay_ms(1000);
+        if unsafe { uno.micros() } >= last_update_time + UPDATE_DELAY_US {
+            uno.left_motor.update();
+            uno.right_motor.update();
+            last_update_time = unsafe { uno.micros() };
+        }
+
+        if unsafe { uno.micros() } >= state_change_time + 1000000 {
+            state = match state {
+                State::Forward => {
+                    uno.left_motor.set(-1.0);
+                    uno.right_motor.set(-1.0);
+                    state_change_time = unsafe { uno.micros() };
+                    State::Backward
+                },
+                State::Backward => {
+                    uno.left_motor.set(0.0);
+                    uno.right_motor.set(0.0);
+                    State::Stopped
+                },
+                State::Stopped => State::Stopped,
+            };
+        }
+        arduino_uno::delay_ms(10);
     }
+
+    let sensor_values = uno.read_sensors();
+    uwriteln!(
+        &mut uno.serial,
+        "{} {} {} {} {} {}",
+        sensor_values[0],
+        sensor_values[1],
+        sensor_values[2],
+        sensor_values[3],
+        sensor_values[4],
+        sensor_values[5]
+    )
+    .void_unwrap();
+
+    loop {}
 }
