@@ -3,8 +3,6 @@
 #![feature(llvm_asm)]
 #![feature(abi_avr_interrupt)]
 
-// Pull in the panic handler from panic-halt
-extern crate panic_halt;
 mod motor;
 mod timers;
 mod zumo_sensors;
@@ -38,6 +36,7 @@ struct Uno {
     timer0: Timer0,
 
     ddr: arduino_uno::DDR,
+    led: PB5<Output>,
     left_motor: MotorController<PB0<Output>, PB2<Pwm<pwm::Timer1Pwm>>>,
     right_motor: MotorController<PD7<Output>, PB1<Pwm<pwm::Timer1Pwm>>>,
     zumo_sensors: ZumoSensors,
@@ -48,6 +47,7 @@ impl Uno {
         let board = arduino_uno::Peripherals::take().unwrap();
         let pins = arduino_uno::Pins::new(board.PORTB, board.PORTC, board.PORTD);
         let serial = arduino_uno::Serial::new(board.USART0, pins.d0, pins.d1.into_output(&pins.ddr), 57600);
+        let led = pins.d13.into_output(&pins.ddr);
         unsafe {
             avr_device::interrupt::enable();
         }
@@ -67,6 +67,7 @@ impl Uno {
             timer0: board.TC0,
 
             ddr: pins.ddr,
+            led,
             left_motor,
             right_motor,
             zumo_sensors: ZumoSensors {
@@ -97,18 +98,19 @@ fn main() -> ! {
     uno.left_motor.set(1.0);
     uno.right_motor.set(1.0);
     loop {
-        if unsafe { uno.micros() } >= last_update_time + UPDATE_DELAY_US {
+        let now = unsafe { uno.micros() };
+        if now >= last_update_time + UPDATE_DELAY_US {
             uno.left_motor.update();
             uno.right_motor.update();
-            last_update_time = unsafe { uno.micros() };
+            last_update_time = now;
         }
-
-        if unsafe { uno.micros() } >= state_change_time + 1000000 {
+        if now >= state_change_time + 1000000 {
+            uno.led.toggle();
             state = match state {
                 State::Forward => {
                     uno.left_motor.set(-1.0);
                     uno.right_motor.set(-1.0);
-                    state_change_time = unsafe { uno.micros() };
+                    state_change_time = now;
                     State::Backward
                 },
                 State::Backward => {
@@ -116,10 +118,9 @@ fn main() -> ! {
                     uno.right_motor.set(0.0);
                     State::Stopped
                 },
-                State::Stopped => State::Stopped,
+                _ => State::Stopped,
             };
         }
-        arduino_uno::delay_ms(10);
     }
 
     let sensor_values = uno.read_sensors();
@@ -136,4 +137,22 @@ fn main() -> ! {
     .void_unwrap();
 
     loop {}
+}
+
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    let mut serial: arduino_uno::Serial<Floating> = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
+    let mut led: PB5<Output> = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
+
+    uwriteln!(&mut serial, "Firmware panic!\r").void_unwrap();
+
+    if let Some(loc) = info.location() {
+        ufmt::uwriteln!(&mut serial, "  At {}:{}:{}\r", loc.file(), loc.line(), loc.column(),).void_unwrap();
+    }
+    loop {
+        led.set_high().void_unwrap();
+        arduino_uno::delay_ms(100);
+        led.set_low().void_unwrap();
+        arduino_uno::delay_ms(100);
+    }
 }
