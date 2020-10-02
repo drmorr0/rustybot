@@ -1,4 +1,4 @@
-use crate::Uno;
+use crate::uno::Uno;
 use embedded_hal::{
     digital::v2::OutputPin,
     PwmPin,
@@ -9,7 +9,7 @@ use void::{
 };
 
 const MAX_MOTOR_DELTA: f32 = 0.1; // 10% of full power
-pub const UPDATE_DELAY_US: u32 = 20000;
+pub const UPDATE_DELAY_US: u32 = 10000;
 
 enum MotorDirection {
     Forward,
@@ -19,8 +19,9 @@ enum MotorDirection {
 pub struct MotorController<PD: OutputPin, PT: PwmPin> {
     direction_pin: PD,
     throttle_pin: PT,
-    target_value: f32,
-    current_value: f32,
+    pub target_value: f32,
+    pub current_value: f32,
+    last_update_time: u32,
 }
 
 impl<PD: OutputPin, PT: PwmPin> MotorController<PD, PT>
@@ -35,6 +36,7 @@ where
             throttle_pin,
             target_value: 0.0,
             current_value: 0.0,
+            last_update_time: 0,
         }
     }
 
@@ -42,8 +44,8 @@ where
         self.target_value = value;
     }
 
-    pub fn update(&mut self) {
-        if self.current_value == self.target_value {
+    pub fn update(&mut self, now: u32) {
+        if now < self.last_update_time + UPDATE_DELAY_US || self.current_value == self.target_value {
             return;
         }
 
