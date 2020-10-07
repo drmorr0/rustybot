@@ -75,7 +75,7 @@ impl Uno {
         self.read_sensors();
         self.left_motor.update(unsafe { self.micros() });
         self.right_motor.update(unsafe { self.micros() });
-        self.write_state(unsafe { self.micros() });
+        self.write_state(unsafe { self.millis() });
     }
 
     pub fn write_state(&mut self, now: u32) {
