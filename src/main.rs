@@ -2,11 +2,18 @@
 #![no_main]
 #![feature(llvm_asm)]
 #![feature(abi_avr_interrupt)]
+#![feature(never_type)]
+#![feature(async_closure)]
+#![feature(panic_info_message)]
+#![feature(fmt_as_str)]
 
+mod avr_async;
+mod mem;
 mod state_machine;
 mod uno;
 
 use crate::{
+    avr_async::Executor,
     state_machine::{
         ExplorationState,
         State,
@@ -23,19 +30,30 @@ use arduino_uno::{
 };
 use ufmt::uwriteln;
 
+use crate::{
+    avr_async::waiter::*,
+    uno::timers::*,
+};
+
 #[arduino_uno::entry]
 fn main() -> ! {
     let mut uno = Uno::init();
+    uwriteln!(uno.serial, "re-entered main");
+    let executor = Executor::get();
 
-    let mut current_state: State = ExplorationState::new();
-    loop {
-        let now = unsafe { uno.micros() };
-        if let Some(s) = current_state.update(&mut uno, now) {
-            current_state = s;
-        }
-        uno.update();
-        arduino_uno::delay_ms(10);
-    }
+    executor.add_driver(uno.led_driver);
+    executor.run(&mut uno.serial);
+
+    loop {}
+    // let mut current_state: State = ExplorationState::new();
+    // loop {
+    //     let now = unsafe { uno.micros() };
+    //     if let Some(s) = current_state.update(&mut uno, now) {
+    //         current_state = s;
+    //     }
+    //     uno.update();
+    //     arduino_uno::delay_ms(10);
+    // }
 }
 
 #[panic_handler]
@@ -47,6 +65,24 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
 
     if let Some(loc) = info.location() {
         ufmt::uwriteln!(&mut serial, "  At {}:{}:{}\r", loc.file(), loc.line(), loc.column(),).void_unwrap();
+    }
+    if let Some(message_args) = info.message() {
+        if let Some(message) = message_args.as_str() {
+            ufmt::uwriteln!(&mut serial, "    {}\r", message);
+        }
+    }
+    let TIMSK0 = 0x6E as *const u8;
+    unsafe {
+        uwriteln!(
+            &mut serial,
+            "{} {} {} {} {}",
+            TIMER0_CMPB_ITERS,
+            TIMER0_CMPB_NEEDED_ITERS,
+            TIMER0_CMPB_REMAINDER,
+            *TIMSK0,
+            *OCR0B
+        )
+        .unwrap();
     }
     loop {
         led.set_high().void_unwrap();

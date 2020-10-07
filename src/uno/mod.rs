@@ -1,10 +1,15 @@
+pub mod led;
 mod motor;
-mod timers;
+pub mod timers;
 mod zumo_sensors;
 
-use crate::uno::{
-    motor::MotorController,
-    zumo_sensors::ZumoSensors,
+use crate::{
+    avr_async::Driver,
+    uno::{
+        led::make_led_driver,
+        motor::MotorController,
+        zumo_sensors::ZumoSensors,
+    },
 };
 use arduino_uno::{
     atmega328p::TC0 as Timer0,
@@ -28,12 +33,17 @@ use ufmt::{
 };
 use void::ResultVoidExt;
 
+pub use timers::{
+    OCR0B,
+    TCNT0,
+};
+
 pub struct Uno {
     pub serial: Usart0<MHz16, Floating>,
     timer0: Timer0,
 
     ddr: arduino_uno::DDR,
-    pub led: PB5<Output>,
+    pub led_driver: Driver,
     pub left_motor: MotorController<PB0<Output>, PB2<Pwm<pwm::Timer1Pwm>>>,
     pub right_motor: MotorController<PD7<Output>, PB1<Pwm<pwm::Timer1Pwm>>>,
     pub sensors: ZumoSensors,
@@ -47,6 +57,7 @@ impl Uno {
         let led = pins.d13.into_output(&pins.ddr);
         unsafe {
             avr_device::interrupt::enable();
+            *(0x53 as *mut u8) = 0x01; // Turn on "idle sleep mode"
         }
 
         let mut pwm_timer = pwm::Timer1Pwm::new(board.TC1, pwm::Prescaler::Prescale64);
@@ -64,7 +75,7 @@ impl Uno {
             timer0: board.TC0,
 
             ddr: pins.ddr,
-            led,
+            led_driver: make_led_driver(led),
             left_motor,
             right_motor,
             sensors: ZumoSensors::new(pins.d5, pins.a2, pins.a0, pins.d11, pins.a3, pins.d4),
@@ -73,9 +84,9 @@ impl Uno {
 
     pub fn update(&mut self) {
         self.read_sensors();
-        self.left_motor.update(unsafe { self.micros() });
-        self.right_motor.update(unsafe { self.micros() });
-        self.write_state(unsafe { self.millis() });
+        self.left_motor.update(timers::micros());
+        self.right_motor.update(timers::micros());
+        self.write_state(timers::millis());
     }
 
     pub fn write_state(&mut self, now: u32) {
