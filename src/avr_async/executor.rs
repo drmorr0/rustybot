@@ -1,20 +1,8 @@
-use crate::{
-    avr_async::{
-        driver::*,
-        Driver,
-    },
-    uno::{
-        led::TOGGLE_COUNT,
-        timers::micros,
-    },
-};
-use arduino_uno::{
-    hal::{
-        clock::MHz16,
-        port::mode::Floating,
-        usart::Usart0,
-    },
-    prelude::*,
+use crate::avr_async::Driver;
+use arduino_uno::hal::{
+    clock::MHz16,
+    port::mode::Floating,
+    usart::Usart0,
 };
 use core::{
     future::Future,
@@ -31,13 +19,10 @@ use heapless::{
     consts::U8,
     Vec,
 };
-use micromath::F32Ext;
-use nb;
-use ufmt::{
-    uwrite,
-    uwriteln,
-};
+use ufmt::uwriteln;
+use void::ResultVoidExt;
 
+pub const MAX_DRIVERS: u8 = 8;
 static mut EXECUTOR_INIT: bool = false;
 pub struct Executor {
     drivers: Vec<Driver, U8>,
@@ -59,17 +44,27 @@ impl Executor {
         }
     }
 
-    pub fn add_driver(&mut self, driver: Driver) {
-        self.drivers.push(driver);
+    pub fn add_async_driver(&mut self, future: &'static mut dyn Future<Output = !>) {
+        match self.drivers.push(Driver { future }) {
+            Ok(_) => (),
+            Err(_) => panic!("The `Executor.drivers` vector is full!"),
+        }
     }
 
     #[inline(always)]
     pub fn add_work(&mut self, driver_id: u8) {
+        // Until https://github.com/rust-lang/rust/issues/78260 is fixed,
+        // these guards are necessary.  This is kinda brittle, if these
+        // registers stop being used for the vector push things could
+        // start breaking again.
         unsafe {
             llvm_asm!("push r26");
             llvm_asm!("push r27");
         }
-        self.work_queue.push(driver_id);
+        match self.work_queue.push(driver_id) {
+            Ok(_) => (),
+            Err(_) => panic!("The `Executor.work_queue` vector is full!"),
+        }
         unsafe {
             llvm_asm!("pop r27");
             llvm_asm!("pop r26");
@@ -77,30 +72,18 @@ impl Executor {
     }
 
     pub fn run(&mut self, serial: &mut Usart0<MHz16, Floating>) {
-        uwriteln!(serial, "executor is starting");
+        uwriteln!(serial, "executor is starting").void_unwrap();
         for driver_id in 0..self.drivers.len() {
             self.add_work(driver_id as u8);
         }
         loop {
-            let now = micros();
-            let upper_padding = 5 - ((((now >> 16) as u16) as f32).log10() as u16);
-            let lower_padding = 5 - (((now as u16) as f32).log10() as u16);
-            for _ in 0..upper_padding {
-                nb::block!(serial.write('0' as u8));
-            }
-            uwrite!(serial, "{}", (now >> 16) as u16);
-            for _ in 0..lower_padding {
-                nb::block!(serial.write('0' as u8));
-            }
-            uwrite!(serial, "{} ", now as u16);
-
-            uwriteln!(serial, "executor woke up!");
+            uwriteln!(serial, "executor woke up!").void_unwrap();
             if let Some(id) = self.work_queue.pop() {
                 unsafe {
                     let task = Pin::new_unchecked(&mut self.drivers[id as usize]);
                     let waker = Waker::from_raw(RawWaker::new(&id as *const _ as *const _, &VTABLE));
                     let mut ctx = Context::from_waker(&waker);
-                    task.poll(&mut ctx);
+                    task.poll(&mut ctx); // TODO handle Poll::Pending
                 }
             }
             unsafe {

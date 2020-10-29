@@ -6,6 +6,9 @@
 #![feature(async_closure)]
 #![feature(panic_info_message)]
 #![feature(fmt_as_str)]
+#![feature(const_in_array_repeat_expressions)]
+#![allow(dead_code)]
+#![allow(unused_imports)]
 
 mod avr_async;
 mod mem;
@@ -30,18 +33,11 @@ use arduino_uno::{
 };
 use ufmt::uwriteln;
 
-use crate::{
-    avr_async::waiter::*,
-    uno::timers::*,
-};
-
 #[arduino_uno::entry]
 fn main() -> ! {
-    let mut uno = Uno::init();
-    uwriteln!(uno.serial, "re-entered main");
-    let executor = Executor::get();
+    let mut executor = Executor::get();
+    let mut uno = Uno::init(&mut executor);
 
-    executor.add_driver(uno.led_driver);
     executor.run(&mut uno.serial);
 
     loop {}
@@ -68,22 +64,10 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     }
     if let Some(message_args) = info.message() {
         if let Some(message) = message_args.as_str() {
-            ufmt::uwriteln!(&mut serial, "    {}\r", message);
+            ufmt::uwriteln!(&mut serial, "    {}\r", message).void_unwrap();
         }
     }
-    let TIMSK0 = 0x6E as *const u8;
-    unsafe {
-        uwriteln!(
-            &mut serial,
-            "{} {} {} {} {}",
-            TIMER0_CMPB_ITERS,
-            TIMER0_CMPB_NEEDED_ITERS,
-            TIMER0_CMPB_REMAINDER,
-            *TIMSK0,
-            *OCR0B
-        )
-        .unwrap();
-    }
+
     loop {
         led.set_high().void_unwrap();
         arduino_uno::delay_ms(100);

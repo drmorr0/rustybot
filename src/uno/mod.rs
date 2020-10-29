@@ -1,12 +1,15 @@
-pub mod led;
 mod motor;
 pub mod timers;
 mod zumo_sensors;
 
+use core::future::Future;
+use crate::mem::Allocator;
 use crate::{
-    avr_async::Driver,
+    avr_async::{
+        Executor,
+        Waiter,
+    },
     uno::{
-        led::make_led_driver,
         motor::MotorController,
         zumo_sensors::ZumoSensors,
     },
@@ -23,9 +26,9 @@ use arduino_uno::{
         pwm,
         usart::Usart0,
     },
+    prelude::*,
 };
 use avr_hal_generic::avr_device;
-use embedded_hal::prelude::*;
 use micromath::F32Ext;
 use ufmt::{
     uwrite,
@@ -33,24 +36,27 @@ use ufmt::{
 };
 use void::ResultVoidExt;
 
-pub use timers::{
-    OCR0B,
-    TCNT0,
-};
-
 pub struct Uno {
     pub serial: Usart0<MHz16, Floating>,
     timer0: Timer0,
 
     ddr: arduino_uno::DDR,
-    pub led_driver: Driver,
     pub left_motor: MotorController<PB0<Output>, PB2<Pwm<pwm::Timer1Pwm>>>,
     pub right_motor: MotorController<PD7<Output>, PB1<Pwm<pwm::Timer1Pwm>>>,
     pub sensors: ZumoSensors,
 }
 
+
+fn get_led_future(mut led: PB5<Output>) -> &'static mut dyn Future<Output = !> {
+    let future = async move || loop {
+        led.toggle().unwrap();
+        Waiter::new(1000).await;
+    };
+    Allocator::get().new(future())
+}
+
 impl Uno {
-    pub fn init() -> Uno {
+    pub fn init(executor: &mut Executor) -> Uno {
         let board = arduino_uno::Peripherals::take().unwrap();
         let pins = arduino_uno::Pins::new(board.PORTB, board.PORTC, board.PORTD);
         let serial = arduino_uno::Serial::new(board.USART0, pins.d0, pins.d1.into_output(&pins.ddr), 57600);
@@ -70,12 +76,12 @@ impl Uno {
             pins.d9.into_output(&pins.ddr).into_pwm(&mut pwm_timer),
         );
         timers::init_timers(&board.TC0);
+        executor.add_async_driver(get_led_future(led));
         Uno {
             serial,
             timer0: board.TC0,
 
             ddr: pins.ddr,
-            led_driver: make_led_driver(led),
             left_motor,
             right_motor,
             sensors: ZumoSensors::new(pins.d5, pins.a2, pins.a0, pins.d11, pins.a3, pins.d4),
