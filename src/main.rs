@@ -7,6 +7,8 @@
 #![feature(panic_info_message)]
 #![feature(fmt_as_str)]
 #![feature(const_in_array_repeat_expressions)]
+#![feature(maybe_uninit_uninit_array)]
+#![feature(maybe_uninit_ref)]
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
@@ -14,6 +16,7 @@ mod avr_async;
 mod mem;
 mod state_machine;
 mod uno;
+mod util;
 
 use crate::{
     avr_async::Executor,

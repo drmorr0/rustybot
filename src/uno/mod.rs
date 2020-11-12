@@ -2,13 +2,12 @@ mod motor;
 pub mod timers;
 mod zumo_sensors;
 
-use core::future::Future;
-use crate::mem::Allocator;
 use crate::{
     avr_async::{
         Executor,
         Waiter,
     },
+    mem::Allocator,
     uno::{
         motor::MotorController,
         zumo_sensors::ZumoSensors,
@@ -29,6 +28,7 @@ use arduino_uno::{
     prelude::*,
 };
 use avr_hal_generic::avr_device;
+use core::future::Future;
 use micromath::F32Ext;
 use ufmt::{
     uwrite,
@@ -46,11 +46,12 @@ pub struct Uno {
     pub sensors: ZumoSensors,
 }
 
-
-fn get_led_future(mut led: PB5<Output>) -> &'static mut dyn Future<Output = !> {
-    let future = async move || loop {
-        led.toggle().unwrap();
-        Waiter::new(1000).await;
+fn led_driver_fut(mut led: PB5<Output>) -> &'static mut dyn Future<Output = !> {
+    let future = async move || {
+        loop {
+            led.toggle().void_unwrap();
+            Waiter::new(1000).await;
+        }
     };
     Allocator::get().new(future())
 }
@@ -76,7 +77,7 @@ impl Uno {
             pins.d9.into_output(&pins.ddr).into_pwm(&mut pwm_timer),
         );
         timers::init_timers(&board.TC0);
-        executor.add_async_driver(get_led_future(led));
+        executor.add_async_driver(led_driver_fut(led));
         Uno {
             serial,
             timer0: board.TC0,

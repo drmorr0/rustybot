@@ -1,12 +1,8 @@
-use crate::avr_async::TimedWaker;
+use crate::util::MinArray;
 use arduino_uno::atmega328p::TC0 as Timer0;
 use avr_device::interrupt::free as critical_section;
 use avr_hal_generic::avr_device;
 use core::task::Waker;
-use heapless::{
-    consts::U8,
-    Vec,
-};
 
 static mut TIMER0_OVF_COUNT: u32 = 0;
 static mut ELAPSED_MS: u32 = 0;
@@ -20,9 +16,7 @@ const TIMER0_TICKS_PER_MS: u8 = 250; // 1000us / (4us per tick) = 250 ticks/ms
 const TCNT0: *const u8 = 0x46 as *const u8;
 const OCR0A: *mut u8 = 0x47 as *mut u8;
 
-static mut NEXT_WAKEUP_TIME: u32 = 0xffffff;
-static mut WAITERS_LEN: usize = 0;
-static mut WAITERS: [Option<TimedWaker>; 8] = [None; 8];
+pub static mut WAITERS: MinArray<Waker> = MinArray::new();
 
 pub fn init_timers(t0: &Timer0) {
     t0.tccr0b.write(|w| w.cs0().prescale_64());
@@ -50,11 +44,7 @@ pub fn millis() -> u32 {
 
 pub fn register_timed_waker(trigger_time_ms: u32, waker: Waker) {
     critical_section(|_| unsafe {
-        WAITERS[WAITERS_LEN] = Some(TimedWaker { trigger_time_ms, waker });
-        WAITERS_LEN += 1;
-        if trigger_time_ms < NEXT_WAKEUP_TIME {
-            NEXT_WAKEUP_TIME = trigger_time_ms;
-        }
+        WAITERS.push(trigger_time_ms, waker);
     });
 }
 
@@ -68,23 +58,11 @@ unsafe fn TIMER0_COMPA() {
     ELAPSED_MS += 1;
 
     // If we have any awaitable tasks that are ready to wake up, send a wake-up signal
-    if ELAPSED_MS >= NEXT_WAKEUP_TIME {
-        NEXT_WAKEUP_TIME = 0xffffffff;
-        for i in 0..8 {
-            if let Some(waiter) = WAITERS[i].take() {
-                if ELAPSED_MS >= waiter.trigger_time_ms {
-                    waiter.waker.wake();
-                    if let Some(swap_waiter) = WAITERS[WAITERS_LEN - 1].take() {
-                        WAITERS[i] = Some(swap_waiter);
-                    }
-                    WAITERS_LEN -= 1;
-                } else if waiter.trigger_time_ms < NEXT_WAKEUP_TIME {
-                    NEXT_WAKEUP_TIME = waiter.trigger_time_ms;
-                    WAITERS[i] = Some(waiter);
-                }
-            }
+    if ELAPSED_MS >= WAITERS.min {
+        for waker in WAITERS.take_less_than(ELAPSED_MS) {
+            waker.wake();
         }
-    };
+    }
 
     // We don't have access to the Timer0 object here, so just use its raw memory location.
     // The AVR spec specifies that with the "in/out" instructions, you must subtract 0x20 from

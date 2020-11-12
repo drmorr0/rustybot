@@ -1,8 +1,18 @@
-use crate::avr_async::Driver;
-use arduino_uno::hal::{
-    clock::MHz16,
-    port::mode::Floating,
-    usart::Usart0,
+use crate::{
+    avr_async::Driver,
+    mem::Allocator,
+    uno::timers::{
+        millis,
+        WAITERS,
+    },
+};
+use arduino_uno::{
+    hal::{
+        clock::MHz16,
+        port::mode::Floating,
+        usart::Usart0,
+    },
+    prelude::*,
 };
 use core::{
     future::Future,
@@ -15,18 +25,20 @@ use core::{
         Waker,
     },
 };
-use heapless::{
-    consts::U8,
-    Vec,
+use micromath::F32Ext;
+use ufmt::{
+    uwrite,
+    uwriteln,
 };
-use ufmt::uwriteln;
 use void::ResultVoidExt;
 
-pub const MAX_DRIVERS: u8 = 8;
+pub const MAX_DRIVERS: usize = 8;
 static mut EXECUTOR_INIT: bool = false;
 pub struct Executor {
-    drivers: Vec<Driver, U8>,
-    work_queue: Vec<u8, U8>,
+    drivers: [MaybeUninit<Driver>; MAX_DRIVERS],
+    drivers_len: usize,
+    work_queue: [usize; MAX_DRIVERS],
+    work_queue_len: usize,
 }
 
 impl Executor {
@@ -35,8 +47,19 @@ impl Executor {
         unsafe {
             if !EXECUTOR_INIT {
                 EXECUTOR.as_mut_ptr().write(Executor {
-                    drivers: Vec::new(),
-                    work_queue: Vec::new(),
+                    drivers: [
+                        MaybeUninit::uninit(),
+                        MaybeUninit::uninit(),
+                        MaybeUninit::uninit(),
+                        MaybeUninit::uninit(),
+                        MaybeUninit::uninit(),
+                        MaybeUninit::uninit(),
+                        MaybeUninit::uninit(),
+                        MaybeUninit::uninit(),
+                    ],
+                    drivers_len: 0,
+                    work_queue: [0; MAX_DRIVERS],
+                    work_queue_len: 0,
                 });
                 EXECUTOR_INIT = true;
             }
@@ -45,47 +68,36 @@ impl Executor {
     }
 
     pub fn add_async_driver(&mut self, future: &'static mut dyn Future<Output = !>) {
-        match self.drivers.push(Driver { future }) {
-            Ok(_) => (),
-            Err(_) => panic!("The `Executor.drivers` vector is full!"),
+        unsafe {
+            self.drivers[self.drivers_len].as_mut_ptr().write(Driver { future });
         }
+        self.drivers_len += 1;
     }
 
-    #[inline(always)]
-    pub fn add_work(&mut self, driver_id: u8) {
-        // Until https://github.com/rust-lang/rust/issues/78260 is fixed,
-        // these guards are necessary.  This is kinda brittle, if these
-        // registers stop being used for the vector push things could
-        // start breaking again.
-        unsafe {
-            llvm_asm!("push r26");
-            llvm_asm!("push r27");
+    pub fn add_work(&mut self, driver_id: usize) {
+        if self.work_queue_len >= MAX_DRIVERS {
+            panic!("The `Executor.work_queue` vector is full!");
         }
-        match self.work_queue.push(driver_id) {
-            Ok(_) => (),
-            Err(_) => panic!("The `Executor.work_queue` vector is full!"),
-        }
-        unsafe {
-            llvm_asm!("pop r27");
-            llvm_asm!("pop r26");
-        }
+        self.work_queue[self.work_queue_len] = driver_id;
+        self.work_queue_len += 1;
     }
 
     pub fn run(&mut self, serial: &mut Usart0<MHz16, Floating>) {
         uwriteln!(serial, "executor is starting").void_unwrap();
-        for driver_id in 0..self.drivers.len() {
-            self.add_work(driver_id as u8);
+        for driver_id in 0..self.drivers_len {
+            self.add_work(driver_id as usize);
         }
         loop {
-            uwriteln!(serial, "executor woke up!").void_unwrap();
-            if let Some(id) = self.work_queue.pop() {
+            for i in 0..self.work_queue_len {
+                let id = self.work_queue[i];
+                uwriteln!(serial, "executor processing task {}!", id as u8).void_unwrap();
                 unsafe {
-                    let task = Pin::new_unchecked(&mut self.drivers[id as usize]);
                     let waker = Waker::from_raw(RawWaker::new(&id as *const _ as *const _, &VTABLE));
                     let mut ctx = Context::from_waker(&waker);
-                    task.poll(&mut ctx); // TODO handle Poll::Pending
+                    Pin::new_unchecked(self.drivers[id].assume_init_mut()).poll(&mut ctx);
                 }
             }
+            self.work_queue_len = 0;
             unsafe {
                 llvm_asm!("sleep");
             }
@@ -101,10 +113,8 @@ unsafe fn clone(data: *const ()) -> RawWaker {
 
 unsafe fn wake(data: *const ()) {
     let e = Executor::get();
-    if e.work_queue.len() == 0 {
-        let val = *(data as *const u8);
-        e.add_work(val);
-    }
+    let val = *(data as *const usize);
+    e.add_work(val);
 }
 unsafe fn wake_by_ref(_: *const ()) {}
 unsafe fn drop(_: *const ()) {}
