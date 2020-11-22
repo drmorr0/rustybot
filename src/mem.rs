@@ -6,8 +6,7 @@ use core::mem::{
     MaybeUninit,
 };
 
-static mut ALLOCATOR_INIT: bool = false;
-static mut MEMORY: [u8; 1024] = [0; 1024];
+static mut MEMORY: [u8; 256] = [0xab; 256];
 
 pub struct Allocator {
     len: usize,
@@ -15,19 +14,15 @@ pub struct Allocator {
     start: *mut u8,
 }
 
+static mut ALLOCATOR: Allocator = Allocator {
+    len: unsafe { MEMORY.len() },
+    pos: 0,
+    start: unsafe { MEMORY.as_mut_ptr() },
+};
+
 impl Allocator {
     pub fn get() -> &'static mut Allocator {
-        static mut ALLOCATOR: MaybeUninit<Allocator> = MaybeUninit::uninit();
-        unsafe {
-            if !ALLOCATOR_INIT {
-                ALLOCATOR.as_mut_ptr().write(Allocator {
-                    len: MEMORY.len(),
-                    pos: 0,
-                    start: MEMORY.as_mut_ptr(),
-                });
-            }
-            &mut *(ALLOCATOR.as_mut_ptr() as *mut Allocator)
-        }
+        unsafe { &mut ALLOCATOR }
     }
 
     fn alloc<T>(&mut self) -> &'static mut MaybeUninit<T> {
@@ -38,7 +33,6 @@ impl Allocator {
             self.pos = new_pos + size;
             unsafe { &mut *(self.start.add(new_pos) as *mut MaybeUninit<T>) }
         } else {
-            // OOM
             panic!("out of memory");
         }
     }

@@ -20,6 +20,7 @@ use core::{
     pin::Pin,
     task::{
         Context,
+        Poll,
         RawWaker,
         RawWakerVTable,
         Waker,
@@ -32,54 +33,45 @@ use ufmt::{
 };
 use void::ResultVoidExt;
 
-pub const MAX_DRIVERS: usize = 8;
-static mut EXECUTOR_INIT: bool = false;
+pub const NTASKS: usize = 8;
+static mut EXECUTOR: Executor = Executor {
+    drivers: [
+        MaybeUninit::uninit(),
+        MaybeUninit::uninit(),
+        MaybeUninit::uninit(),
+        MaybeUninit::uninit(),
+        MaybeUninit::uninit(),
+        MaybeUninit::uninit(),
+        MaybeUninit::uninit(),
+        MaybeUninit::uninit(),
+    ],
+    drivers_len: 0,
+    work_queue: [false; NTASKS],
+};
+
 pub struct Executor {
-    drivers: [MaybeUninit<Driver>; MAX_DRIVERS],
+    drivers: [MaybeUninit<Driver>; NTASKS],
     drivers_len: usize,
-    work_queue: [usize; MAX_DRIVERS],
-    work_queue_len: usize,
+    work_queue: [bool; NTASKS],
 }
 
 impl Executor {
     pub fn get() -> &'static mut Executor {
-        static mut EXECUTOR: MaybeUninit<Executor> = MaybeUninit::uninit();
-        unsafe {
-            if !EXECUTOR_INIT {
-                EXECUTOR.as_mut_ptr().write(Executor {
-                    drivers: [
-                        MaybeUninit::uninit(),
-                        MaybeUninit::uninit(),
-                        MaybeUninit::uninit(),
-                        MaybeUninit::uninit(),
-                        MaybeUninit::uninit(),
-                        MaybeUninit::uninit(),
-                        MaybeUninit::uninit(),
-                        MaybeUninit::uninit(),
-                    ],
-                    drivers_len: 0,
-                    work_queue: [0; MAX_DRIVERS],
-                    work_queue_len: 0,
-                });
-                EXECUTOR_INIT = true;
-            }
-            &mut *(EXECUTOR.as_mut_ptr() as *mut Executor)
-        }
+        unsafe { &mut EXECUTOR }
     }
 
     pub fn add_async_driver(&mut self, future: &'static mut dyn Future<Output = !>) {
         unsafe {
-            self.drivers[self.drivers_len].as_mut_ptr().write(Driver { future });
+            self.drivers[self.drivers_len].as_mut_ptr().write(Driver {
+                id: self.drivers_len,
+                future,
+            });
         }
         self.drivers_len += 1;
     }
 
     pub fn add_work(&mut self, driver_id: usize) {
-        if self.work_queue_len >= MAX_DRIVERS {
-            panic!("The `Executor.work_queue` vector is full!");
-        }
-        self.work_queue[self.work_queue_len] = driver_id;
-        self.work_queue_len += 1;
+        self.work_queue[driver_id] = true;
     }
 
     pub fn run(&mut self, serial: &mut Usart0<MHz16, Floating>) {
@@ -88,16 +80,24 @@ impl Executor {
             self.add_work(driver_id as usize);
         }
         loop {
-            for i in 0..self.work_queue_len {
-                let id = self.work_queue[i];
+            for id in 0..self.drivers_len {
+                if !self.work_queue[id] {
+                    continue;
+                }
                 uwriteln!(serial, "executor processing task {}!", id as u8).void_unwrap();
                 unsafe {
-                    let waker = Waker::from_raw(RawWaker::new(&id as *const _ as *const _, &VTABLE));
+                    self.work_queue[id] = false;
+                    // The drivers are part of a static object, so we know they won't move; thus
+                    // it's safe to pin them
+                    let driver = Pin::new_unchecked(self.drivers[id].assume_init_mut());
+                    let waker = Waker::from_raw(RawWaker::new(&driver.id as *const _ as *const _, &VTABLE));
                     let mut ctx = Context::from_waker(&waker);
-                    Pin::new_unchecked(self.drivers[id].assume_init_mut()).poll(&mut ctx);
+
+                    // the drivers are infinite loops, so they will never return Poll::Ready
+                    // we just discard the result to silence the compiler warning
+                    let _ = driver.poll(&mut ctx);
                 }
             }
-            self.work_queue_len = 0;
             unsafe {
                 llvm_asm!("sleep");
             }

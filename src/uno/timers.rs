@@ -1,8 +1,8 @@
-use crate::util::MinArray;
 use arduino_uno::atmega328p::TC0 as Timer0;
 use avr_device::interrupt::free as critical_section;
 use avr_hal_generic::avr_device;
 use core::task::Waker;
+use minarray::MinArray;
 
 static mut TIMER0_OVF_COUNT: u32 = 0;
 static mut ELAPSED_MS: u32 = 0;
@@ -56,10 +56,14 @@ unsafe fn TIMER0_OVF() {
 #[avr_device::interrupt(atmega328p)]
 unsafe fn TIMER0_COMPA() {
     ELAPSED_MS += 1;
+    if ELAPSED_MS >= 0x018cba80 {
+        panic!("oh no")
+    }
 
     // If we have any awaitable tasks that are ready to wake up, send a wake-up signal
-    if ELAPSED_MS >= WAITERS.min {
-        for waker in WAITERS.take_less_than(ELAPSED_MS) {
+    // TODO make gte
+    if ELAPSED_MS > WAITERS.min {
+        for (_, waker) in WAITERS.take_less_than(ELAPSED_MS) {
             waker.wake();
         }
     }

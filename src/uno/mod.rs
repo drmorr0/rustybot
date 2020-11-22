@@ -41,12 +41,10 @@ pub struct Uno {
     timer0: Timer0,
 
     ddr: arduino_uno::DDR,
-    pub left_motor: MotorController<PB0<Output>, PB2<Pwm<pwm::Timer1Pwm>>>,
-    pub right_motor: MotorController<PD7<Output>, PB1<Pwm<pwm::Timer1Pwm>>>,
     pub sensors: ZumoSensors,
 }
 
-fn led_driver_fut(mut led: PB5<Output>) -> &'static mut dyn Future<Output = !> {
+fn led_driver(mut led: PB5<Output>) -> &'static mut dyn Future<Output = !> {
     let future = async move || {
         loop {
             led.toggle().void_unwrap();
@@ -77,22 +75,20 @@ impl Uno {
             pins.d9.into_output(&pins.ddr).into_pwm(&mut pwm_timer),
         );
         timers::init_timers(&board.TC0);
-        executor.add_async_driver(led_driver_fut(led));
+        executor.add_async_driver(led_driver(led));
+        executor.add_async_driver(left_motor.get_driver());
+        executor.add_async_driver(right_motor.get_driver());
         Uno {
             serial,
             timer0: board.TC0,
 
             ddr: pins.ddr,
-            left_motor,
-            right_motor,
             sensors: ZumoSensors::new(pins.d5, pins.a2, pins.a0, pins.d11, pins.a3, pins.d4),
         }
     }
 
     pub fn update(&mut self) {
         self.read_sensors();
-        self.left_motor.update(timers::micros());
-        self.right_motor.update(timers::micros());
         self.write_state(timers::millis());
     }
 
@@ -109,17 +105,17 @@ impl Uno {
         uwrite!(&mut self.serial, "{}", now as u16).void_unwrap();
         uwriteln!(
             &mut self.serial,
-            ": sensors = [{} {} {} {} {} {}]; motors = {}/{} {}/{}",
+            ": sensors = [{} {} {} {} {} {}]; motors", 
             self.sensors.values[0],
             self.sensors.values[1],
             self.sensors.values[2],
             self.sensors.values[3],
             self.sensors.values[4],
             self.sensors.values[5],
-            (self.left_motor.current_value * 255.0) as i16,
+            /*(self.left_motor.current_value * 255.0) as i16,
             (self.left_motor.target_value * 255.0) as i16,
             (self.right_motor.current_value * 255.0) as i16,
-            (self.right_motor.target_value * 255.0) as i16,
+            (self.right_motor.target_value * 255.0) as i16,*/
         )
         .void_unwrap();
     }

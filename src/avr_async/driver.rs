@@ -8,6 +8,7 @@ use core::{
 };
 
 pub struct Driver {
+    pub id: usize,
     pub future: &'static mut dyn Future<Output = !>,
 }
 

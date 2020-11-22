@@ -2,13 +2,12 @@
 #![no_main]
 #![feature(llvm_asm)]
 #![feature(abi_avr_interrupt)]
-#![feature(never_type)]
-#![feature(async_closure)]
-#![feature(panic_info_message)]
-#![feature(fmt_as_str)]
-#![feature(const_in_array_repeat_expressions)]
-#![feature(maybe_uninit_uninit_array)]
-#![feature(maybe_uninit_ref)]
+#![feature(never_type)] // Used for futures that never return
+#![feature(async_closure)] // drivers are implemented as async closures
+#![feature(panic_info_message)] // Get a usable message when we panic (sometimes)
+#![feature(fmt_as_str)] // Convert panic message args to a string
+#![feature(maybe_uninit_ref)] // Get a mutable reference to a maybe-uninit driver
+#![feature(const_ptr_offset)] // Get a pointer to the MEMORY (fake heap)
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
@@ -16,15 +15,9 @@ mod avr_async;
 mod mem;
 mod state_machine;
 mod uno;
-mod util;
 
 use crate::{
     avr_async::Executor,
-    state_machine::{
-        ExplorationState,
-        State,
-        StateObject,
-    },
     uno::Uno,
 };
 use arduino_uno::{
@@ -44,15 +37,6 @@ fn main() -> ! {
     executor.run(&mut uno.serial);
 
     loop {}
-    // let mut current_state: State = ExplorationState::new();
-    // loop {
-    //     let now = unsafe { uno.micros() };
-    //     if let Some(s) = current_state.update(&mut uno, now) {
-    //         current_state = s;
-    //     }
-    //     uno.update();
-    //     arduino_uno::delay_ms(10);
-    // }
 }
 
 #[panic_handler]
