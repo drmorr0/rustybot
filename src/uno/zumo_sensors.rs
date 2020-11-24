@@ -1,4 +1,7 @@
-use crate::Uno;
+use crate::{
+    uno::timers,
+    Uno,
+};
 use arduino_uno::{
     hal::port::{
         mode::*,
@@ -10,7 +13,6 @@ use arduino_uno::{
 };
 
 const SENSOR_TIMEOUT: u16 = 2000;
-const SENSOR_DELAY_US: u16 = 1000; // Leads to a sample rate of 1 kHz
 
 pub struct ZumoSensors {
     pub s0: Option<PD5<Input<Floating>>>,
@@ -78,9 +80,9 @@ impl Uno {
         let s5 = s5.into_floating_input(&mut self.ddr);
 
         self.sensors.values = [SENSOR_TIMEOUT; 6];
-        self.sensors.last_update_time = unsafe { self.micros() };
+        self.sensors.last_update_time = timers::micros();
         loop {
-            let time = (unsafe { self.micros() } - self.sensors.last_update_time) as u16;
+            let time = (timers::micros() - self.sensors.last_update_time) as u16;
             if time >= SENSOR_TIMEOUT {
                 break;
             }

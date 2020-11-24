@@ -10,6 +10,10 @@ micromath = "1.0.1"
 nb = "0.1.1"
 ufmt = "0.1.0"
 
+[dependencies.minarray]
+#git = "https://github.com/drmorr0/minarray"
+path = "../minarray"
+
 [dependencies.void]
 version = "1"
 default-features = false

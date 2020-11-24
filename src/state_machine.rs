@@ -55,7 +55,7 @@ impl BoundaryDetectedState {
         State::BoundaryDetected(Self {})
     }
 
-    fn update(&mut self, uno: &mut Uno, current_time_us: u32) -> Option<State> {
+    fn update(&mut self, uno: &mut Uno, _current_time_us: u32) -> Option<State> {
         uno.left_motor.set(0.0);
         uno.right_motor.set(0.0);
         None
