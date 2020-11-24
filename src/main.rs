@@ -13,12 +13,16 @@
 
 mod avr_async;
 mod mem;
-mod state_machine;
+//mod state_machine;
 mod uno;
 
+use core::cell::RefCell;
 use crate::{
     avr_async::Executor,
+    mem::Allocator,
     uno::Uno,
+    uno::MotorController,
+    avr_async::Waiter,
 };
 use arduino_uno::{
     hal::port::{
@@ -34,7 +38,23 @@ fn main() -> ! {
     let mut executor = Executor::get();
     let mut uno = Uno::init(&mut executor);
 
-    executor.run(&mut uno.serial);
+    let mut speed = -0.5;
+    let controller_driver = async move |controller_ref: &'static RefCell<MotorController>| {
+        loop {
+            let mut wait_time_ms = 1000;
+            if let Ok(mut controller) = controller_ref.try_borrow_mut() {
+                speed *= -1.0;
+                controller.left_target = speed;
+                controller.right_target = speed;
+            } else {
+                wait_time_ms = 5;
+            }
+            Waiter::new(wait_time_ms).await;
+        }
+    };
+    executor.add_async_driver(Allocator::get().new(controller_driver(uno.motor_controller)));
+
+    executor.run(&mut uno);
 
     loop {}
 }

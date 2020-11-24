@@ -1,10 +1,6 @@
 use crate::{
     avr_async::Driver,
-    mem::Allocator,
-    uno::timers::{
-        millis,
-        WAITERS,
-    },
+    uno::Uno,
 };
 use arduino_uno::{
     hal::{
@@ -74,17 +70,18 @@ impl Executor {
         self.work_queue[driver_id] = true;
     }
 
-    pub fn run(&mut self, serial: &mut Usart0<MHz16, Floating>) {
-        uwriteln!(serial, "executor is starting").void_unwrap();
+    pub fn run(&mut self, uno: &mut Uno) {
+        //uwriteln!(uno.serial, "executor is starting").void_unwrap();
         for driver_id in 0..self.drivers_len {
             self.add_work(driver_id as usize);
         }
         loop {
+            //uno.write_state();
             for id in 0..self.drivers_len {
                 if !self.work_queue[id] {
                     continue;
                 }
-                uwriteln!(serial, "executor processing task {}!", id as u8).void_unwrap();
+                //uwriteln!(uno.serial, "executor processing task {}!", id as u8).void_unwrap();
                 unsafe {
                     self.work_queue[id] = false;
                     // The drivers are part of a static object, so we know they won't move; thus

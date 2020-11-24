@@ -1,6 +1,19 @@
-use crate::avr_async::Waiter;
-use core::future::Future;
-use crate::mem::Allocator;
+use crate::{
+    avr_async::Waiter,
+    mem::Allocator,
+};
+use arduino_uno::hal::{
+    port::{
+        mode::*,
+        portb::*,
+        portd::*,
+    },
+    pwm,
+};
+use core::{
+    cell::RefCell,
+    future::Future,
+};
 use embedded_hal::{
     digital::v2::OutputPin,
     PwmPin,
@@ -18,57 +31,78 @@ enum MotorDirection {
     Reverse,
 }
 
-pub struct MotorController<PD: OutputPin, PT: PwmPin> {
-    direction_pin: PD,
-    throttle_pin: PT,
-    pub target_value: f32,
-    pub current_value: f32,
+pub struct MotorController {
+    pub left_target: f32,
+    pub right_target: f32,
 }
 
-impl<PD: OutputPin, PT: PwmPin> MotorController<PD, PT>
-where
-    PD: OutputPin<Error = Void>,
-    PT: PwmPin<Duty = u8>,
-{
-    pub fn new(direction_pin: PD, mut throttle_pin: PT) -> &'static mut MotorController<PD, PT> {
-        throttle_pin.enable();
-        Allocator::get().new(MotorController {
-            direction_pin,
-            throttle_pin,
-            target_value: 0.0,
-            current_value: 0.0,
-        })
+impl MotorController {
+    // We have to construct these as static references, because the driver (future) holds
+    // a reference to "self" that is expected to be static
+    pub fn new() -> &'static mut RefCell<MotorController> {
+        Allocator::get().new(RefCell::new(MotorController {
+            left_target: 0.0,
+            right_target: 0.0,
+        }))
     }
+}
 
-    pub fn set(&mut self, value: f32) {
-        self.target_value = value;
-    }
-
-    pub fn get_driver(&'static mut self) -> &'static mut dyn Future<Output = !> {
-        let future = async move || {
-            loop {
-                if self.current_value == self.target_value {
-                    Waiter::new(UPDATE_DELAY_MS).await;
-                    continue;
+pub fn get_motor_driver(
+    controller_ref: &'static RefCell<MotorController>,
+    mut left_direction_pin: PB0<Output>,
+    mut left_throttle_pin: PB2<Pwm<pwm::Timer1Pwm>>,
+    mut right_direction_pin: PD7<Output>,
+    mut right_throttle_pin: PB1<Pwm<pwm::Timer1Pwm>>,
+) -> &'static mut dyn Future<Output = !> {
+    left_throttle_pin.enable();
+    right_throttle_pin.enable();
+    let mut current_left_value: f32 = 0.0;
+    let mut current_right_value: f32 = 0.0;
+    let future = async move || {
+        loop {
+            if let Ok(controller) = controller_ref.try_borrow() {
+                if current_left_value != controller.left_target {
+                    update_motor(
+                        controller.left_target,
+                        &mut current_left_value,
+                        &mut left_direction_pin,
+                        &mut left_throttle_pin,
+                    );
                 }
 
-                self.current_value = match self.current_value {
-                    cv if cv < self.target_value - MAX_MOTOR_DELTA => cv + MAX_MOTOR_DELTA,
-                    cv if cv > self.target_value + MAX_MOTOR_DELTA => cv - MAX_MOTOR_DELTA,
-                    _ => self.target_value,
-                };
-
-                let (dir, throttle) = compute_direction_and_throttle(self.current_value);
-                match dir {
-                    MotorDirection::Forward => self.direction_pin.set_low().void_unwrap(),
-                    MotorDirection::Reverse => self.direction_pin.set_high().void_unwrap(),
+                if current_right_value != controller.right_target {
+                    update_motor(
+                        controller.right_target,
+                        &mut current_right_value,
+                        &mut right_direction_pin,
+                        &mut right_throttle_pin,
+                    );
                 }
-                self.throttle_pin.set_duty(throttle);
-                Waiter::new(UPDATE_DELAY_MS).await;
             }
-        };
-        Allocator::get().new(future())
+            Waiter::new(UPDATE_DELAY_MS).await;
+        }
+    };
+    Allocator::get().new(future())
+}
+
+fn update_motor<PD: 'static + OutputPin<Error = Void>, PT: 'static + PwmPin<Duty = u8>>(
+    target_value: f32,
+    current_value: &mut f32,
+    direction_pin: &mut PD,
+    throttle_pin: &mut PT,
+) {
+    *current_value = match *current_value {
+        cv if cv < target_value - MAX_MOTOR_DELTA => cv + MAX_MOTOR_DELTA,
+        cv if cv > target_value + MAX_MOTOR_DELTA => cv - MAX_MOTOR_DELTA,
+        _ => target_value,
+    };
+
+    let (dir, throttle) = compute_direction_and_throttle(*current_value);
+    match dir {
+        MotorDirection::Forward => direction_pin.set_low().void_unwrap(),
+        MotorDirection::Reverse => direction_pin.set_high().void_unwrap(),
     }
+    throttle_pin.set_duty(throttle);
 }
 
 fn compute_direction_and_throttle(value: f32) -> (MotorDirection, u8) {
