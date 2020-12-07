@@ -13,16 +13,20 @@
 
 mod avr_async;
 mod mem;
-//mod state_machine;
+mod state_machine;
 mod uno;
 
-use core::cell::RefCell;
 use crate::{
-    avr_async::Executor,
+    avr_async::{
+        Executor,
+        Waiter,
+    },
     mem::Allocator,
-    uno::Uno,
-    uno::MotorController,
-    avr_async::Waiter,
+    state_machine::build_state_machine,
+    uno::{
+        MotorController,
+        Uno,
+    },
 };
 use arduino_uno::{
     hal::port::{
@@ -31,32 +35,18 @@ use arduino_uno::{
     },
     prelude::*,
 };
+use core::cell::RefCell;
 use ufmt::uwriteln;
 
 #[arduino_uno::entry]
 fn main() -> ! {
     let mut executor = Executor::get();
-    let mut uno = Uno::init(&mut executor);
+    let uno = Uno::init(&mut executor);
+    uno.motor_controller.borrow_mut().left_target = 0.5;
+    uno.motor_controller.borrow_mut().right_target = 0.5;
+    executor.add_async_driver(build_state_machine(uno));
 
-    let mut speed = -0.5;
-    let controller_driver = async move |controller_ref: &'static RefCell<MotorController>| {
-        loop {
-            let mut wait_time_ms = 1000;
-            if let Ok(mut controller) = controller_ref.try_borrow_mut() {
-                speed *= -1.0;
-                controller.left_target = speed;
-                controller.right_target = speed;
-            } else {
-                wait_time_ms = 5;
-            }
-            Waiter::new(wait_time_ms).await;
-        }
-    };
-    executor.add_async_driver(Allocator::get().new(controller_driver(uno.motor_controller)));
-
-    executor.run(&mut uno);
-
-    loop {}
+    executor.run();
 }
 
 #[panic_handler]

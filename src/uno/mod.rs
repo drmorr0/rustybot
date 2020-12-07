@@ -9,9 +9,7 @@ use crate::{
     },
     mem::Allocator,
     uno::{
-        motor::{
-            get_motor_driver,
-        },
+        motor::get_motor_driver,
         zumo_sensors::ZumoSensors,
     },
 };
@@ -53,17 +51,15 @@ pub struct Uno {
 }
 
 fn led_driver(mut led: PB5<Output>) -> &'static mut dyn Future<Output = !> {
-    let future = async move || {
-        loop {
-            led.toggle().void_unwrap();
-            Waiter::new(750).await;
-        }
+    let future = async move || loop {
+        led.toggle().void_unwrap();
+        Waiter::new(750).await;
     };
     Allocator::get().new(future())
 }
 
 impl Uno {
-    pub fn init(executor: &mut Executor) -> Uno {
+    pub fn init(executor: &mut Executor) -> &'static mut Uno {
         let board = arduino_uno::Peripherals::take().unwrap();
         let pins = arduino_uno::Pins::new(board.PORTB, board.PORTC, board.PORTD);
         let serial = arduino_uno::Serial::new(board.USART0, pins.d0, pins.d1.into_output(&pins.ddr), 57600);
@@ -84,48 +80,43 @@ impl Uno {
             pins.d7.into_output(&pins.ddr),
             pins.d9.into_output(&pins.ddr).into_pwm(&mut pwm_timer),
         ));
-        Uno {
+        Allocator::get().new(Uno {
             serial,
             timer0: board.TC0,
 
             ddr: pins.ddr,
             motor_controller,
             sensors: ZumoSensors::new(pins.d5, pins.a2, pins.a0, pins.d11, pins.a3, pins.d4),
-        }
+        })
     }
 
     pub fn write_state(&mut self) {
-        let now = timers::millis();
-        let upper_padding = 5 - ((((now >> 16) as u16) as f32).log10() as u16);
-        let lower_padding = 5 - (((now as u16) as f32).log10() as u16);
-        for _ in 0..upper_padding {
-            nb::block!(self.serial.write('0' as u8)).void_unwrap();
-        }
-        uwrite!(&mut self.serial, "{}", (now >> 16) as u16).void_unwrap();
-        for _ in 0..lower_padding {
-            nb::block!(self.serial.write('0' as u8)).void_unwrap();
-        }
-        uwrite!(&mut self.serial, "{}", now as u16).void_unwrap();
-        uwrite!(
+        uwriteln!(
             &mut self.serial,
-            ": sensors = []; motors ",
-            // self.sensors.values[0],
-            // self.sensors.values[1],
-            // self.sensors.values[2],
-            // self.sensors.values[3],
-            // self.sensors.values[4],
-            // self.sensors.values[5],
-        )
-        .void_unwrap();
-        if let Ok(mc) = self.motor_controller.try_borrow() {
-            uwriteln!(
-                &mut self.serial,
-                "{} {}",
-                (self.motor_controller.borrow().left_target * 255.0) as i16,
-                (self.motor_controller.borrow().right_target * 255.0) as i16,
-            );
-        } else {
-            uwriteln!(&mut self.serial, "unavailable");
-        }
+            "avg COMPA timing: {}",
+            timers::timer0_compa_avg_time()
+        );
+        // let now = timers::millis();
+        // let upper_padding = 5 - ((((now >> 16) as u16) as f32).log10() as u16);
+        // let lower_padding = 5 - (((now as u16) as f32).log10() as u16);
+        // for _ in 0..upper_padding {
+        //     nb::block!(self.serial.write('0' as u8)).void_unwrap();
+        // }
+        // uwrite!(&mut self.serial, "{}", (now >> 16) as u16).void_unwrap();
+        // for _ in 0..lower_padding {
+        //     nb::block!(self.serial.write('0' as u8)).void_unwrap();
+        // }
+        // uwrite!(&mut self.serial, "{}", now as u16).void_unwrap();
+        // if let Ok(mc) = self.motor_controller.try_borrow() {
+        //     uwriteln!(
+        //         &mut self.serial,
+        //         "{} {}",
+        //         (mc.left_target * 255.0) as i16,
+        //         (mc.right_target * 255.0) as i16,
+        //     )
+        //     .void_unwrap();
+        // } else {
+        //     uwriteln!(&mut self.serial, "unavailable").void_unwrap();
+        // }
     }
 }

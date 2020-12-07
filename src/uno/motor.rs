@@ -58,29 +58,27 @@ pub fn get_motor_driver(
     right_throttle_pin.enable();
     let mut current_left_value: f32 = 0.0;
     let mut current_right_value: f32 = 0.0;
-    let future = async move || {
-        loop {
-            if let Ok(controller) = controller_ref.try_borrow() {
-                if current_left_value != controller.left_target {
-                    update_motor(
-                        controller.left_target,
-                        &mut current_left_value,
-                        &mut left_direction_pin,
-                        &mut left_throttle_pin,
-                    );
-                }
-
-                if current_right_value != controller.right_target {
-                    update_motor(
-                        controller.right_target,
-                        &mut current_right_value,
-                        &mut right_direction_pin,
-                        &mut right_throttle_pin,
-                    );
-                }
+    let future = async move || loop {
+        if let Ok(controller) = controller_ref.try_borrow() {
+            if current_left_value != controller.left_target {
+                update_motor(
+                    controller.left_target,
+                    &mut current_left_value,
+                    &mut left_direction_pin,
+                    &mut left_throttle_pin,
+                );
             }
-            Waiter::new(UPDATE_DELAY_MS).await;
+
+            if current_right_value != controller.right_target {
+                update_motor(
+                    controller.right_target,
+                    &mut current_right_value,
+                    &mut right_direction_pin,
+                    &mut right_throttle_pin,
+                );
+            }
         }
+        Waiter::new(UPDATE_DELAY_MS).await;
     };
     Allocator::get().new(future())
 }

@@ -16,7 +16,9 @@ const TIMER0_TICKS_PER_MS: u8 = 250; // 1000us / (4us per tick) = 250 ticks/ms
 const TCNT0: *const u8 = 0x46 as *const u8;
 const OCR0A: *mut u8 = 0x47 as *mut u8;
 
-pub static mut WAITERS: MinArray<Waker> = MinArray::new();
+static mut WAITERS: MinArray<Waker> = MinArray::new();
+static mut COMPA_TIMING: u32 = 0;
+static mut COMPA_COUNTS: u32 = 0;
 
 pub fn init_timers(t0: &Timer0) {
     t0.tccr0b.write(|w| w.cs0().prescale_64());
@@ -42,6 +44,16 @@ pub fn millis() -> u32 {
     critical_section(|_| unsafe { ELAPSED_MS })
 }
 
+pub fn timer0_compa_avg_time() -> u32 {
+    unsafe {
+        if ELAPSED_MS > 0 {
+            critical_section(|_| COMPA_TIMING / COMPA_COUNTS)
+        } else {
+            0
+        }
+    }
+}
+
 pub fn register_timed_waker(trigger_time_ms: u32, waker: Waker) {
     critical_section(|_| unsafe {
         WAITERS.push(trigger_time_ms, waker);
@@ -56,16 +68,15 @@ unsafe fn TIMER0_OVF() {
 #[avr_device::interrupt(atmega328p)]
 unsafe fn TIMER0_COMPA() {
     ELAPSED_MS += 1;
-    if ELAPSED_MS >= 0x018cba80 {
-        panic!("oh no")
-    }
 
-    // If we have any awaitable tasks that are ready to wake up, send a wake-up signal
-    // TODO make gte
     if ELAPSED_MS > WAITERS.min {
+        COMPA_COUNTS += 1;
+        let start = micros();
         for (_, waker) in WAITERS.take_less_than(ELAPSED_MS) {
             waker.wake();
         }
+        let end = micros();
+        COMPA_TIMING += end - start;
     }
 
     // We don't have access to the Timer0 object here, so just use its raw memory location.

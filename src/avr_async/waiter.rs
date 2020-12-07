@@ -39,3 +39,10 @@ impl Future for Waiter {
         Poll::Pending
     }
 }
+
+#[macro_export]
+macro_rules! yielder {
+    () => {
+        Waiter::new(0).await;
+    };
+}

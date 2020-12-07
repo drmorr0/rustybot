@@ -23,11 +23,6 @@ use core::{
     },
 };
 use micromath::F32Ext;
-use ufmt::{
-    uwrite,
-    uwriteln,
-};
-use void::ResultVoidExt;
 
 pub const NTASKS: usize = 8;
 static mut EXECUTOR: Executor = Executor {
@@ -70,18 +65,15 @@ impl Executor {
         self.work_queue[driver_id] = true;
     }
 
-    pub fn run(&mut self, uno: &mut Uno) {
-        //uwriteln!(uno.serial, "executor is starting").void_unwrap();
+    pub fn run(&mut self) -> ! {
         for driver_id in 0..self.drivers_len {
             self.add_work(driver_id as usize);
         }
         loop {
-            //uno.write_state();
             for id in 0..self.drivers_len {
                 if !self.work_queue[id] {
                     continue;
                 }
-                //uwriteln!(uno.serial, "executor processing task {}!", id as u8).void_unwrap();
                 unsafe {
                     self.work_queue[id] = false;
                     // The drivers are part of a static object, so we know they won't move; thus
