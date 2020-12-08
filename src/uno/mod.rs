@@ -93,9 +93,15 @@ impl Uno {
     pub fn write_state(&mut self) {
         uwriteln!(
             &mut self.serial,
-            "avg COMPA timing: {}",
-            timers::timer0_compa_avg_time()
-        );
+            "sensors = [{}, {}, {}, {}, {}, {}]",
+            self.sensors.values[0],
+            self.sensors.values[1],
+            self.sensors.values[2],
+            self.sensors.values[3],
+            self.sensors.values[4],
+            self.sensors.values[5],
+        )
+        .void_unwrap();
         // let now = timers::millis();
         // let upper_padding = 5 - ((((now >> 16) as u16) as f32).log10() as u16);
         // let lower_padding = 5 - (((now as u16) as f32).log10() as u16);
