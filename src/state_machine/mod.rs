@@ -16,16 +16,16 @@ use core::{
 };
 
 pub enum State {
-    Exploration,
     BoundaryDetected,
+    Exploration { found_edge: bool },
 }
 
 pub fn build_state_machine(uno: &'static mut Uno) -> &'static mut dyn Future<Output = !> {
-    let mut current_state = State::Exploration;
+    let mut current_state = State::Exploration { found_edge: false };
     let future = async move || loop {
         current_state = match current_state {
-            State::Exploration => exploration_future(uno).await,
             State::BoundaryDetected => boundary_detected_future(uno).await,
+            State::Exploration { found_edge } => exploration_future(uno, found_edge).await,
         };
     };
     Allocator::get().new(future())

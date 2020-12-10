@@ -1,7 +1,13 @@
+use crate::util::*;
 use arduino_uno::atmega328p::TC0 as Timer0;
-use avr_device::interrupt::free as critical_section;
-use avr_hal_generic::avr_device;
-use core::task::Waker;
+use avr_hal_generic::{
+    avr_device,
+    avr_device::interrupt::free as critical_section,
+};
+use core::{
+    ptr::read_volatile,
+    task::Waker,
+};
 use minarray::MinArray;
 
 static mut TIMER0_OVF_COUNT: u32 = 0;
@@ -13,12 +19,7 @@ const TIMER0_TICK_US: u32 = 4;
 const TIMER0_OVF_US: u32 = 1024;
 const TIMER0_TICKS_PER_MS: u8 = 250; // 1000us / (4us per tick) = 250 ticks/ms
 
-const TCNT0: *const u8 = 0x46 as *const u8;
-const OCR0A: *mut u8 = 0x47 as *mut u8;
-
 static mut WAITERS: MinArray<Waker> = MinArray::new();
-static mut COMPA_TIMING: u32 = 0;
-static mut COMPA_COUNTS: u32 = 0;
 
 pub fn init_timers(t0: &Timer0) {
     t0.tccr0b.write(|w| w.cs0().prescale_64());
@@ -32,26 +33,28 @@ pub fn init_timers(t0: &Timer0) {
 //
 // Bummer.
 pub fn micros() -> u32 {
-    critical_section(|_| {
-        // I don't want to have to pass around the uno object to get access to Timer0 or whatever
-        // so we just use the raw address.  See note below about "in/out" vs "ld/st" instructions.
-        unsafe { (*TCNT0 as u32) * TIMER0_TICK_US + TIMER0_OVF_COUNT * TIMER0_OVF_US }
-    })
+    critical_section(|_| micros_no_interrupt())
+}
+
+// Call this function if you're already in a disabled-interrupt context to avoid unnecessary
+// sei/cli (interrupt enable/disable) instructions
+pub fn micros_no_interrupt() -> u32 {
+    unsafe {
+        // If the TIMER0_OVF interrupt fires and interrupts are disabled, the TCNT0 register will
+        // still overflow but the value in the TIMER0_OVF_COUNT will be incorrect, leading to this
+        // function returning incorrect values.  We still could get incorrect values if the
+        // interrupt fires between reading TIFR0 and TCNT0, but this (seems to) happen rarely.  In
+        // this case we will add an extra 1024us into the timer, which will be rectified the next
+        // time the function is called.
+        let count0 = read_volatile(TCNT0) as u32;
+        let extra_ovf = (read_volatile(TIFR0) & 1) as u32;
+        (count0 as u32) * TIMER0_TICK_US + (TIMER0_OVF_COUNT + extra_ovf) * TIMER0_OVF_US
+    }
 }
 
 // This will overflow after about 49 days
 pub fn millis() -> u32 {
     critical_section(|_| unsafe { ELAPSED_MS })
-}
-
-pub fn timer0_compa_avg_time() -> u32 {
-    unsafe {
-        if ELAPSED_MS > 0 {
-            critical_section(|_| COMPA_TIMING / COMPA_COUNTS)
-        } else {
-            0
-        }
-    }
 }
 
 pub fn register_timed_waker(trigger_time_ms: u32, waker: Waker) {
@@ -70,18 +73,10 @@ unsafe fn TIMER0_COMPA() {
     ELAPSED_MS += 1;
 
     if ELAPSED_MS > WAITERS.min {
-        COMPA_COUNTS += 1;
-        let start = micros();
         for (_, waker) in WAITERS.take_less_than(ELAPSED_MS) {
             waker.wake();
         }
-        let end = micros();
-        COMPA_TIMING += end - start;
     }
 
-    // We don't have access to the Timer0 object here, so just use its raw memory location.
-    // The AVR spec specifies that with the "in/out" instructions, you must subtract 0x20 from
-    // the address; inspecting the compiler output shows that it uses "in/out" instructions _and_
-    // it automagically subtracts 0x20, so we use here the 0x47 address for ld/st.
     *OCR0A += TIMER0_TICKS_PER_MS; // Modular arithmetic works!  :D
 }

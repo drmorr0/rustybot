@@ -13,7 +13,7 @@ pub async fn boundary_detected_future(uno: &mut Uno) -> State {
     if let Ok(mut mc) = uno.motor_controller.try_borrow_mut() {
         mc.left_target *= -1.0;
         mc.right_target *= -1.0;
-        state = State::Exploration;
+        state = State::Exploration { found_edge: true };
     } else {
         wait_time_ms = 5;
     }
