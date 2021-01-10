@@ -5,7 +5,7 @@ use crate::{
     Uno,
 };
 use arduino_uno::{
-    atmega328p::EXINT as ExternalInterruptRegister,
+    pac::EXINT as ExternalInterruptRegister,
     hal::port::{
         mode::*,
         portb::*,

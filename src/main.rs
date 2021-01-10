@@ -43,11 +43,13 @@ use ufmt::uwriteln;
 fn main() -> ! {
     let mut executor = Executor::get();
     let uno = Uno::init(&mut executor);
-    uno.motor_controller.borrow_mut().left_target = -0.25;
-    uno.motor_controller.borrow_mut().right_target = -0.25;
-    executor.add_async_driver(build_state_machine(uno));
 
-    executor.run();
+    // uno.motor_controller.borrow_mut().left_target = 0.0;
+    // uno.motor_controller.borrow_mut().right_target = 0.0;
+    // executor.add_async_driver(build_state_machine(uno));
+
+    // executor.run();
+    loop {}
 }
 
 #[panic_handler]

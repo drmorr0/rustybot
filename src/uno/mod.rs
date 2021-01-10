@@ -14,7 +14,7 @@ use crate::{
     },
 };
 use arduino_uno::{
-    atmega328p::TC0 as Timer0,
+    pac::TC0 as Timer0,
     hal::{
         clock::MHz16,
         port::{
@@ -62,7 +62,22 @@ impl Uno {
     pub fn init(executor: &mut Executor) -> &'static mut Uno {
         let board = arduino_uno::Peripherals::take().unwrap();
         let pins = arduino_uno::Pins::new(board.PORTB, board.PORTC, board.PORTD);
-        let serial = arduino_uno::Serial::new(board.USART0, pins.d0, pins.d1.into_output(&pins.ddr), 57600);
+        let mut serial = arduino_uno::Serial::new(board.USART0, pins.d0, pins.d1.into_output(&pins.ddr), 57600.into_baudrate());
+        let mut i2c = arduino_uno::I2cMaster::new(
+            board.TWI,
+            pins.a4.into_pull_up_input(&pins.ddr),
+            pins.a5.into_pull_up_input(&pins.ddr),
+            50000,
+        );
+
+        uwriteln!(&mut serial, "Write direction test:\n").void_unwrap();
+        i2c.i2cdetect(&mut serial, arduino_uno::hal::i2c::Direction::Write)
+            .void_unwrap();
+        uwriteln!(&mut serial, "Read direction test:\n").void_unwrap();
+        i2c.i2cdetect(&mut serial, arduino_uno::hal::i2c::Direction::Read)
+            .void_unwrap();
+
+        loop {}
         let led = pins.d13.into_output(&pins.ddr);
         unsafe {
             avr_device::interrupt::enable();
