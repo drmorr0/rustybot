@@ -1,3 +1,4 @@
+edition = "2018"
 comment_width = 100
 imports_layout = "Vertical"
 match_block_trailing_comma = true

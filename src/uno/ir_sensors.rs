@@ -5,13 +5,13 @@ use crate::{
     Uno,
 };
 use arduino_uno::{
-    pac::EXINT as ExternalInterruptRegister,
     hal::port::{
         mode::*,
         portb::*,
         portc::*,
         portd::*,
     },
+    pac::EXINT as ExternalInterruptRegister,
     prelude::*,
 };
 use avr_hal_generic::avr_device;
@@ -31,7 +31,7 @@ type S3 = PB3<Input<Floating>>;
 type S4 = PC3<Input<Floating>>;
 type S5 = PD4<Input<Floating>>;
 
-pub struct ZumoSensors {
+pub struct IRSensors {
     s0: Option<S0>,
     s1: Option<S1>,
     s2: Option<S2>,
@@ -41,15 +41,15 @@ pub struct ZumoSensors {
     pub values: &'static [u32; 6],
 }
 
-impl ZumoSensors {
-    pub fn new(s0: S0, s1: S1, s2: S2, s3: S3, s4: S4, s5: S5) -> ZumoSensors {
+impl IRSensors {
+    pub fn new(s0: S0, s1: S1, s2: S2, s3: S3, s4: S4, s5: S5) -> IRSensors {
         unsafe {
             *PCICR = 0x00;
             *PCMSK0 = 0x08;
             *PCMSK1 = 0x0d;
             *PCMSK2 = 0x30;
         }
-        ZumoSensors {
+        IRSensors {
             s0: Some(s0),
             s1: Some(s1),
             s2: Some(s2),
@@ -62,13 +62,13 @@ impl ZumoSensors {
 }
 
 impl Uno {
-    pub async fn read_sensor_values(&mut self) {
-        let s0 = self.sensors.s0.take().unwrap();
-        let s1 = self.sensors.s1.take().unwrap();
-        let s2 = self.sensors.s2.take().unwrap();
-        let s3 = self.sensors.s3.take().unwrap();
-        let s4 = self.sensors.s4.take().unwrap();
-        let s5 = self.sensors.s5.take().unwrap();
+    pub async fn read_ir_sensor_values(&mut self) {
+        let s0 = self.ir_sensors.s0.take().unwrap();
+        let s1 = self.ir_sensors.s1.take().unwrap();
+        let s2 = self.ir_sensors.s2.take().unwrap();
+        let s3 = self.ir_sensors.s3.take().unwrap();
+        let s4 = self.ir_sensors.s4.take().unwrap();
+        let s5 = self.ir_sensors.s5.take().unwrap();
 
         let mut s0 = s0.into_output(&mut self.ddr);
         let mut s1 = s1.into_output(&mut self.ddr);
@@ -99,12 +99,12 @@ impl Uno {
         let s4 = s4.into_floating_input(&mut self.ddr);
         let s5 = s5.into_floating_input(&mut self.ddr);
 
-        self.sensors.s0 = Some(s0);
-        self.sensors.s1 = Some(s1);
-        self.sensors.s2 = Some(s2);
-        self.sensors.s3 = Some(s3);
-        self.sensors.s4 = Some(s4);
-        self.sensors.s5 = Some(s5);
+        self.ir_sensors.s0 = Some(s0);
+        self.ir_sensors.s1 = Some(s1);
+        self.ir_sensors.s2 = Some(s2);
+        self.ir_sensors.s3 = Some(s3);
+        self.ir_sensors.s4 = Some(s4);
+        self.ir_sensors.s5 = Some(s5);
 
         Waiter::new(SENSOR_TIMEOUT_MS).await;
         toggle_pc_interrupts();

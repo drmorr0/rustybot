@@ -8,8 +8,8 @@ use crate::{
 };
 
 pub async fn exploration_future(uno: &mut Uno, found_edge: bool) -> State {
-    uno.read_sensor_values().await;
-    let triggered_count = uno.sensors.values.iter().filter(|&&x| x > 1500).count();
+    uno.read_ir_sensor_values().await;
+    let triggered_count = uno.ir_sensors.values.iter().filter(|&&x| x > 1500).count();
 
     let mut wait_time_ms: u32 = 100;
     let mut state = State::Exploration { found_edge: false };
