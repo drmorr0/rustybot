@@ -15,14 +15,13 @@ use arduino_uno::{
     prelude::*,
 };
 use avr_hal_generic::avr_device;
-use ufmt::uwriteln;
 use void::ResultVoidExt;
 
 const SENSOR_CHARGE_TIME_US: u16 = 10;
 const SENSOR_TIMEOUT_MS: u32 = 2;
 
 static mut SENSOR_TRIGGERED: u8 = 0; // Each bit tracks whether the corresponding sensor has registered
-static mut SENSOR_VALUES: [u32; 6] = [0xffffffff; 6];
+static mut SENSOR_VALUES: [u32; 6] = [u32::MAX; 6];
 
 type S0 = PD5<Input<Floating>>;
 type S1 = PC2<Input<Floating>>;
@@ -114,7 +113,7 @@ impl Uno {
         unsafe {
             for i in 0..SENSOR_VALUES.len() {
                 if SENSOR_VALUES[i] == start_time {
-                    SENSOR_VALUES[i] = 0xffffffff;
+                    SENSOR_VALUES[i] = u32::MAX;
                 }
             }
         }
