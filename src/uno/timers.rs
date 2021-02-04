@@ -1,5 +1,5 @@
 use crate::util::*;
-use arduino_uno::atmega328p::TC0 as Timer0;
+use arduino_uno::pac::TC0 as Timer0;
 use avr_hal_generic::{
     avr_device,
     avr_device::interrupt::free as critical_section,

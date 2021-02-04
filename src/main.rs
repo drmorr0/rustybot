@@ -37,34 +37,34 @@ use arduino_uno::{
     prelude::*,
 };
 use core::cell::RefCell;
-use ufmt::uwriteln;
+// use ufmt::uwriteln;
 
 #[arduino_uno::entry]
 fn main() -> ! {
     let mut executor = Executor::get();
     let uno = Uno::init(&mut executor);
-    uno.motor_controller.borrow_mut().left_target = -0.25;
-    uno.motor_controller.borrow_mut().right_target = -0.25;
+
     executor.add_async_driver(build_state_machine(uno));
 
     executor.run();
 }
 
 #[panic_handler]
-fn panic(info: &core::panic::PanicInfo) -> ! {
-    let mut serial: arduino_uno::Serial<Floating> = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
+fn panic(_info: &core::panic::PanicInfo) -> ! {
     let mut led: PB5<Output> = unsafe { core::mem::MaybeUninit::uninit().assume_init() };
 
-    uwriteln!(&mut serial, "Firmware panic!\r").void_unwrap();
+    // let mut serial: arduino_uno::Serial<Floating> = unsafe {
+    // core::mem::MaybeUninit::uninit().assume_init() }; uwriteln!(&mut serial, "Firmware
+    // panic!\r").void_unwrap();
 
-    if let Some(loc) = info.location() {
-        ufmt::uwriteln!(&mut serial, "  At {}:{}:{}\r", loc.file(), loc.line(), loc.column(),).void_unwrap();
-    }
-    if let Some(message_args) = info.message() {
-        if let Some(message) = message_args.as_str() {
-            ufmt::uwriteln!(&mut serial, "    {}\r", message).void_unwrap();
-        }
-    }
+    // if let Some(loc) = info.location() {
+    //     ufmt::uwriteln!(&mut serial, "  At {}:{}:{}\r", loc.file(), loc.line(),
+    // loc.column(),).void_unwrap(); }
+    // if let Some(message_args) = info.message() {
+    //     if let Some(message) = message_args.as_str() {
+    //         ufmt::uwriteln!(&mut serial, "    {}\r", message).void_unwrap();
+    //     }
+    // }
 
     loop {
         led.set_high().void_unwrap();

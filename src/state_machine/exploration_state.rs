@@ -1,5 +1,6 @@
 use crate::{
     avr_async::Waiter,
+    state_machine,
     state_machine::State,
     uno::{
         MotorController,
@@ -8,20 +9,25 @@ use crate::{
 };
 
 pub async fn exploration_future(uno: &mut Uno, found_edge: bool) -> State {
-    uno.read_sensor_values().await;
-    let triggered_count = uno.sensors.values.iter().filter(|&&x| x > 1500).count();
-
-    let mut wait_time_ms: u32 = 100;
-    let mut state = State::Exploration { found_edge: false };
-    if triggered_count > 1 {
-        wait_time_ms = 0;
-        if found_edge {
-            state = State::Exploration { found_edge: true };
-        } else {
-            state = State::BoundaryDetected;
-        }
+    if found_edge {
+        uno.motor_controller.set_targets(-0.5, -0.5);
+    } else {
+        uno.motor_controller.set_targets(0.5, 0.5);
     }
 
-    Waiter::new(wait_time_ms).await;
-    return state;
+    loop {
+        uno.read_ir_sensor_values().await;
+        let triggered_count = uno.ir_sensors.values.iter().filter(|&&x| x > 500).count();
+
+        if triggered_count > 1 {
+            if !found_edge {
+                return State::Exploration { found_edge: true };
+            }
+        } else if found_edge {
+            // we've moved off the boundary, so now we rotate 90 degrees
+            return State::Rotation { angle: 90.0 };
+        }
+
+        Waiter::new(state_machine::UPDATE_DELAY_MS).await;
+    }
 }
