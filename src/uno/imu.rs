@@ -44,7 +44,7 @@ impl IMU {
         // 11 -> high resolution mode
         // 100 -> 50Hz output data rate
         // 00 -> no interrupt requests are latched
-        i2c.write(MAG_ACC_ADDR, &[MAG_ACC_CTRL0 + 5, 0x64])
+        i2c.write(MAG_ACC_ADDR, &[MAG_ACC_CTRL0 + 5, 0x70])
             .expect("write failed");
 
         // 0x20 = +/- 4 gauss range
