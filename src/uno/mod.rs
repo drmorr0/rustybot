@@ -12,12 +12,7 @@ use crate::{
     },
     mem::Allocator,
     uno::{
-        eeprom::{
-            IMU_X_MAX_ADDR,
-            IMU_X_MIN_ADDR,
-            IMU_Y_MAX_ADDR,
-            IMU_Y_MIN_ADDR,
-        },
+        eeprom::*,
         imu::IMU,
         ir_sensors::IRSensors,
         pushbutton::Pushbutton,
@@ -60,7 +55,7 @@ pub struct Uno {
     pub serial: Usart0<MHz16, Floating>,
     timer0: Timer0,
 
-    ddr: arduino_uno::DDR,
+    pub ddr: arduino_uno::DDR,
     eeprom: EEPROM,
     pub imu: IMU,
     pub ir_sensors: IRSensors,
@@ -116,14 +111,38 @@ impl Uno {
         })
     }
 
+    pub async fn blink(&mut self, count: u8, delay_ms: u32) {
+        for _ in 0..count {
+            self.led.toggle().void_unwrap();
+            Waiter::new(delay_ms).await;
+            self.led.toggle().void_unwrap();
+            Waiter::new(delay_ms).await;
+        }
+    }
+
     pub async fn load_calibration_data(&mut self) {
-        let (imu_x_min, imu_x_max, imu_y_min, imu_y_max) = (
+        let imu_calibration_vector = (
             self.read_eeprom_u16(IMU_X_MIN_ADDR).await as i16,
             self.read_eeprom_u16(IMU_X_MAX_ADDR).await as i16,
             self.read_eeprom_u16(IMU_Y_MIN_ADDR).await as i16,
             self.read_eeprom_u16(IMU_Y_MAX_ADDR).await as i16,
         );
-        self.imu
-            .set_calibration_vector(imu_x_min, imu_x_max, imu_y_min, imu_y_max);
+        self.imu.set_calibration_vector(imu_calibration_vector);
+
+        let ir_calibration_vector = (
+            self.read_eeprom_u16(IR_0_MIN_ADDR).await,
+            self.read_eeprom_u16(IR_0_MAX_ADDR).await,
+            self.read_eeprom_u16(IR_1_MIN_ADDR).await,
+            self.read_eeprom_u16(IR_1_MAX_ADDR).await,
+            self.read_eeprom_u16(IR_2_MIN_ADDR).await,
+            self.read_eeprom_u16(IR_2_MAX_ADDR).await,
+            self.read_eeprom_u16(IR_3_MIN_ADDR).await,
+            self.read_eeprom_u16(IR_3_MAX_ADDR).await,
+            self.read_eeprom_u16(IR_4_MIN_ADDR).await,
+            self.read_eeprom_u16(IR_4_MAX_ADDR).await,
+            self.read_eeprom_u16(IR_5_MIN_ADDR).await,
+            self.read_eeprom_u16(IR_5_MAX_ADDR).await,
+        );
+        self.ir_sensors.set_calibration_vector(ir_calibration_vector);
     }
 }

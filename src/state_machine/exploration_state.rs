@@ -16,7 +16,7 @@ pub async fn exploration_future(uno: &mut Uno, found_edge: bool) -> State {
     }
 
     loop {
-        uno.read_ir_sensor_values().await;
+        uno.ir_sensors.read_calibrated(&mut uno.ddr).await;
         let triggered_count = uno.ir_sensors.values.iter().filter(|&&x| x > 500).count();
 
         if triggered_count > 1 {

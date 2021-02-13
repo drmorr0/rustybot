@@ -84,11 +84,11 @@ impl IMU {
         (x_min, x_max, y_min, y_max)
     }
 
-    pub fn set_calibration_vector(&mut self, x_min: i16, x_max: i16, y_min: i16, y_max: i16) {
-        self.x_min = x_min as f32;
-        self.x_range = (x_max - x_min) as f32;
-        self.y_min = y_min as f32;
-        self.y_range = (y_max - y_min) as f32;
+    pub fn set_calibration_vector(&mut self, vector: (i16, i16, i16, i16)) {
+        self.x_min = vector.0 as f32;
+        self.x_range = (vector.1 - vector.0) as f32;
+        self.y_min = vector.2 as f32;
+        self.y_range = (vector.3 - vector.2) as f32;
     }
 
     pub fn get_current_heading_degrees(&mut self) -> f32 {
