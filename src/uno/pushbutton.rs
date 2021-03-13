@@ -1,8 +1,6 @@
 use crate::{
-    avr_async::Waiter,
     mem::Allocator,
     state_machine::UPDATE_DELAY_MS,
-    uno::timers,
 };
 use arduino_uno::{
     hal::port::{
@@ -10,6 +8,10 @@ use arduino_uno::{
         portb::*,
     },
     prelude::*,
+};
+use avr_async::{
+    millis,
+    Waiter,
 };
 
 const DEBOUNCE_MS: u32 = 10;
@@ -32,7 +34,7 @@ impl Pushbutton {
 
     pub async fn count_presses_before(&self, end_time_ms: u32) -> u8 {
         let mut count = 0;
-        while timers::millis() <= end_time_ms {
+        while millis() <= end_time_ms {
             if self.wait_for_press_before(Some(end_time_ms)).await {
                 count += 1;
             }
@@ -57,7 +59,7 @@ impl Pushbutton {
         };
 
         let mut triggered = false;
-        while timers::millis() <= end_time_ms.unwrap_or(u32::MAX) {
+        while millis() <= end_time_ms.unwrap_or(u32::MAX) {
             if !check_fn(&self.pin).void_unwrap() {
                 Waiter::new(UPDATE_DELAY_MS).await;
                 continue;

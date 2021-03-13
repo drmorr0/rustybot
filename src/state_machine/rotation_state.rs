@@ -1,5 +1,4 @@
 use crate::{
-    avr_async::Waiter,
     state_machine,
     state_machine::State,
     uno::{
@@ -7,6 +6,7 @@ use crate::{
         Uno,
     },
 };
+use avr_async::Waiter;
 use micromath::F32Ext;
 
 const TOLERANCE: f32 = 5.0;

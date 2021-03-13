@@ -11,17 +11,12 @@
 #![allow(dead_code)]
 #![allow(unused_imports)]
 
-mod avr_async;
 mod mem;
 mod state_machine;
 mod uno;
 mod util;
 
 use crate::{
-    avr_async::{
-        Executor,
-        Waiter,
-    },
     mem::Allocator,
     state_machine::build_state_machine,
     uno::{
@@ -36,6 +31,7 @@ use arduino_uno::{
     },
     prelude::*,
 };
+use avr_async::Executor;
 use core::cell::RefCell;
 // use ufmt::uwriteln;
 

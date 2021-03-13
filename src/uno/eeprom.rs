@@ -1,8 +1,6 @@
-use crate::{
-    Uno,
-    Waiter,
-};
+use crate::Uno;
 use arduino_uno::pac::EEPROM;
+use avr_async::Waiter;
 use avr_hal_generic::avr_device;
 use core::ops::Add;
 

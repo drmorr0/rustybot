@@ -1,6 +1,4 @@
 use crate::{
-    avr_async::Waiter,
-    uno::timers,
     util::*,
     Uno,
 };
@@ -14,6 +12,11 @@ use arduino_uno::{
     pac::EXINT as ExternalInterruptRegister,
     prelude::*,
     DDR,
+};
+use avr_async::{
+    micros,
+    micros_no_interrupt,
+    Waiter,
 };
 use avr_hal_generic::avr_device;
 use embedded_hal::digital::v2::InputPin;
@@ -147,7 +150,7 @@ impl IRSensors {
         s5.set_high().void_unwrap();
 
         arduino_uno::delay_us(SENSOR_CHARGE_TIME_US);
-        let start_time = timers::micros() as u16; // modular arithemtic makes this work even when it rolls over
+        let start_time = micros() as u16; // modular arithemtic makes this work even when it rolls over
         unsafe {
             SENSOR_VALUES = [start_time; 6];
             SENSOR_TRIGGERED = 0;
@@ -194,14 +197,14 @@ unsafe fn update_sensor(i: usize, is_low: bool, end_time: u16) {
 #[avr_device::interrupt(atmega328p)]
 unsafe fn PCINT0() {
     let s3: S3 = get_pin();
-    let end_time = timers::micros_no_interrupt() as u16;
+    let end_time = micros_no_interrupt() as u16;
     update_sensor(3, s3.is_low().void_unwrap(), end_time);
 }
 
 #[avr_device::interrupt(atmega328p)]
 unsafe fn PCINT1() {
     let (s1, s2, s4): (S1, S2, S4) = (get_pin(), get_pin(), get_pin());
-    let end_time = timers::micros_no_interrupt() as u16;
+    let end_time = micros_no_interrupt() as u16;
     update_sensor(1, s1.is_low().void_unwrap(), end_time);
     update_sensor(2, s2.is_low().void_unwrap(), end_time);
     update_sensor(4, s4.is_low().void_unwrap(), end_time);
@@ -210,7 +213,7 @@ unsafe fn PCINT1() {
 #[avr_device::interrupt(atmega328p)]
 unsafe fn PCINT2() {
     let (s0, s5): (S0, S5) = (get_pin(), get_pin());
-    let end_time = timers::micros_no_interrupt() as u16;
+    let end_time = micros_no_interrupt() as u16;
     update_sensor(0, s0.is_low().void_unwrap(), end_time);
     update_sensor(5, s5.is_low().void_unwrap(), end_time);
 }

@@ -19,11 +19,15 @@ default-features = false
 
 [dependencies.arduino-uno]
 git = "https://github.com/Rahix/avr-hal"
-rev = "d17a441"
+rev = "a202778"
 
 [dependencies.avr-hal-generic]
 git = "https://github.com/Rahix/avr-hal"
-rev = "d17a441"
+rev = "a202778"
+
+[dependencies.avr-async]
+path = "../avr-async"
+features = ["atmega328p"]
 
 # Configure the build for minimal size
 [profile.dev]

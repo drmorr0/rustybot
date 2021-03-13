@@ -1,5 +1,4 @@
 use crate::{
-    avr_async::Waiter,
     state_machine::State,
     uno::{
         eeprom::*,
@@ -8,6 +7,7 @@ use crate::{
     },
 };
 use arduino_uno::prelude::*;
+use avr_async::Waiter;
 
 pub async fn calibration_future(uno: &mut Uno) -> State {
     // Calibrate the IMU

@@ -1,7 +1,4 @@
-use crate::{
-    avr_async::Waiter,
-    mem::Allocator,
-};
+use crate::mem::Allocator;
 use arduino_uno::hal::{
     port::{
         mode::*,
@@ -10,6 +7,7 @@ use arduino_uno::hal::{
     },
     pwm,
 };
+use avr_async::Waiter;
 use core::{
     cell::RefCell,
     future::Future,

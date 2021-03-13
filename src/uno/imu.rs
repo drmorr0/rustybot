@@ -1,8 +1,8 @@
-use crate::Waiter;
 use arduino_uno::{
     pac::EEPROM,
     prelude::*,
 };
+use avr_async::Waiter;
 use avr_hal_generic::port::mode::{
     Input,
     PullUp,

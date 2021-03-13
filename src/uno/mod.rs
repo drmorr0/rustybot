@@ -3,13 +3,8 @@ mod imu;
 mod ir_sensors;
 pub mod motor;
 mod pushbutton;
-pub mod timers;
 
 use crate::{
-    avr_async::{
-        Executor,
-        Waiter,
-    },
     mem::Allocator,
     uno::{
         eeprom::*,
@@ -37,6 +32,10 @@ use arduino_uno::{
         TC0 as Timer0,
     },
     prelude::*,
+};
+use avr_async::{
+    Executor,
+    Waiter,
 };
 use avr_hal_generic::avr_device;
 use core::{
@@ -95,7 +94,7 @@ impl Uno {
             pins.d7.into_output(&pins.ddr),
             pins.d9.into_output(&pins.ddr).into_pwm(&mut pwm_timer),
         );
-        timers::init_timers(&board.TC0);
+        avr_async::init_timers();
         executor.add_async_driver(motor_controller.get_motor_driver());
         Allocator::get().new(Uno {
             serial,
